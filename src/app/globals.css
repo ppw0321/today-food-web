@@ -1,0 +1,8 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Pretendard', sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
