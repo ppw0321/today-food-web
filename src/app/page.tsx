@@ -14,7 +14,7 @@ import {
   createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail
 } from "firebase/auth";
 import {
-  collection, addDoc, doc, updateDoc, deleteDoc, query, orderBy, onSnapshot, serverTimestamp, limit, where, getCountFromServer, getDoc, getDocs
+  collection, addDoc, doc, updateDoc, deleteDoc, query, orderBy, onSnapshot, serverTimestamp, limit, where, getCountFromServer, getDoc, getDocs, setDoc
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
@@ -271,7 +271,28 @@ export default function Home() {
   const receiptRef = useRef<HTMLDivElement>(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
 
-  // 🌟 카카오 SDK 동적 로드 (앱이 켜질 때 한 번만 실행됨)
+  // 🌟 유저가 선택한 '대표 뱃지' 상태
+  const [activeBadge, setActiveBadge] = useState<{ icon: string, title: string, color: string, bg: string } | null>(null);
+
+  // 현재 노출할 뱃지 결정 (선택한 뱃지가 없으면 기본 레벨 뱃지 노출)
+  const displayBadge = activeBadge || getCurrentBadge(totalCount);
+
+  // 유저 로그인 시 대표 뱃지 설정 불러오기
+  useEffect(() => {
+    if (!user) {
+      setActiveBadge(null);
+      return;
+    }
+    const userDocRef = doc(db, "users", user.uid);
+    const unsub = onSnapshot(userDocRef, (docSnap) => {
+      if (docSnap.exists() && docSnap.data().selectedBadge) {
+        setActiveBadge(docSnap.data().selectedBadge);
+      }
+    });
+    return () => unsub();
+  }, [user]);
+
+  // 카카오 SDK 로드
   useEffect(() => {
     const script = document.createElement("script");
     script.src = "https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js";
@@ -295,6 +316,20 @@ export default function Home() {
       setBadgeStats({ total: snap.size, categories: counts });
     } catch (e) { console.error("뱃지 통계 로딩 실패:", e); }
     setIsLoadingBadges(false);
+  };
+
+  // 🌟 대표 뱃지 선택 함수
+  const handleSelectBadge = async (badge: any, type: 'general' | 'category') => {
+    if (!user) return;
+    const userDocRef = doc(db, "users", user.uid);
+    await setDoc(userDocRef, {
+      selectedBadge: {
+        icon: badge.icon,
+        title: badge.title,
+        color: badge.color || "text-stone-800",
+        bg: badge.bg || (type === 'category' ? "bg-white border-stone-200" : "bg-stone-100 border-stone-200")
+      }
+    }, { merge: true });
   };
 
   const totalBadgesCount = GENERAL_BADGES.length + Object.values(CATEGORY_BADGES).reduce((acc, curr) => acc + curr.length, 0);
@@ -507,7 +542,7 @@ export default function Home() {
       (error) => {
         let errMsg = "위치 정보를 가져올 수 없습니다.";
         if (error.code === 1) errMsg = "위치 권한이 거부되었습니다. 기기의 설정에서 위치 권한을 허용해 주세요.";
-        if (error.code === 2) errMsg = "현재 위치 파악 불가. GPS 신호가 약합니다.";
+        if (error.code === 2) errMsg = "현재 위치 파 파악 불가. GPS 신호가 약합니다.";
         if (error.code === 3) errMsg = "위치 요청 시간이 초과되었습니다.";
         setLocationError(errMsg);
         setIsLocating(false);
@@ -678,7 +713,6 @@ export default function Home() {
     catch (error) { console.error("삭제 실패:", error); alert("삭제 중 오류가 발생했습니다."); }
   };
 
-  // 🔗 기존 링크 복사 기능
   const handleCopyLink = async () => {
     if (!user || !shareReview) return;
     const importUrl = `${window.location.origin}/?uid=${user.uid}&rid=${shareReview.id}`;
@@ -694,7 +728,6 @@ export default function Home() {
     }
   };
 
-  // 📸 (인스타용) 영수증을 이미지로 바로 저장하는 함수 (PC 공유창 뜨는 문제 방지!)
   const handleDownloadReceipt = async () => {
     if (!receiptRef.current || !shareReview || !user) return;
     setIsGeneratingImage(true);
@@ -704,13 +737,13 @@ export default function Home() {
         cacheBust: true,
         backgroundColor: '#ffffff',
         pixelRatio: 2,
-        fontEmbedCSS: '', // 🚨 최신 CSS 호환을 위해 에러 무시하는 옵션!
+        fontEmbedCSS: '',
       });
 
       const link = document.createElement("a");
       link.href = dataUrl;
       link.download = `today_food_${shareReview.storeName}.png`;
-      link.click(); // 즉시 다운로드 실행!
+      link.click();
 
     } catch (error) {
       console.error("이미지 저장 실패:", error);
@@ -720,7 +753,6 @@ export default function Home() {
     }
   };
 
-  // 💬 (카카오톡 전용) 공식 카카오 Link SDK를 이용해 풍부한 템플릿(버튼포함) 전송!
   const handleKakaoShare = () => {
     if (!shareReview || !user) return;
 
@@ -739,7 +771,7 @@ export default function Home() {
         content: {
           title: `🍽️ [오늘 뭐 먹지?] ${shareReview.storeName}`,
           description: `⭐ 별점: ${shareReview.rating}.0\n💬 "${shareReview.comment}"`,
-          imageUrl: shareReview.imageUrls?.[receiptImageIndex] || 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1', // 사진이 없으면 기본사진
+          imageUrl: shareReview.imageUrls?.[receiptImageIndex] || 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1',
           link: {
             mobileWebUrl: importUrl,
             webUrl: importUrl,
@@ -1014,117 +1046,123 @@ export default function Home() {
         </div>
       )}
 
-      {/* 📸 감성 영수증 공유 모달 (업데이트: 카카오 전용 공유 추가 + QR코드) */}
+      {/* 📸 감성 영수증 공유 모달 (업데이트: 스크롤 완벽 지원 및 하단 닫기 버튼) */}
       {shareReview && (
-        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={() => setShareReview(null)} />
+        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/60 backdrop-blur-md" onClick={() => setShareReview(null)}>
+          <div className="min-h-full flex flex-col items-center justify-center p-4 py-12">
 
-          <div className="relative z-10 flex flex-col items-center w-full max-w-sm animate-in zoom-in-95 duration-200">
-            <button onClick={() => setShareReview(null)} className="absolute -top-12 right-0 p-2 text-white/70 hover:text-white transition-colors cursor-pointer"><X size={24} /></button>
+            <div className="relative z-10 flex flex-col items-center w-full max-w-sm animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
 
-            {/* 🌟 썸네일 선택기 */}
-            {shareReview.imageUrls && shareReview.imageUrls.length > 1 && (
-              <div className="flex gap-2 mb-4 w-[300px] overflow-x-auto scrollbar-hide pb-2">
-                {shareReview.imageUrls.map((url, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setReceiptImageIndex(idx)}
-                    className={`w-12 h-12 shrink-0 rounded-lg border-2 transition-all cursor-pointer overflow-hidden ${idx === receiptImageIndex ? 'border-orange-500 scale-110 shadow-md' : 'border-transparent opacity-50 hover:opacity-100'}`}
-                  >
-                    <img src={url} crossOrigin="anonymous" className="w-full h-full object-cover" alt={`thumb-${idx}`} />
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* 영수증 캡처 영역 */}
-            <div
-              ref={receiptRef}
-              className="bg-white w-[300px] p-6 shadow-2xl relative overflow-hidden"
-              style={{ fontFamily: "'Noto Sans KR', sans-serif" }}
-            >
-              {/* 영수증 윗부분 지그재그 */}
-              <div className="absolute top-0 left-0 right-0 h-2 bg-transparent" style={{ backgroundImage: "linear-gradient(-45deg, transparent 4px, white 4px), linear-gradient(45deg, transparent 4px, white 4px)", backgroundSize: "8px 8px" }} />
-
-              <div className="border-b-2 border-dashed border-stone-300 pb-4 mb-4 text-center mt-2">
-                <h2 className="text-2xl font-black text-stone-800 tracking-tighter uppercase">TODAY FOOD</h2>
-                <p className="text-[10px] text-stone-500 font-medium mt-1">맛있는 기억을 기록하다</p>
-              </div>
-
-              {shareReview.imageUrls && shareReview.imageUrls[receiptImageIndex] && (
-                <div className="mb-4 rounded-xl border border-stone-200 p-1 bg-stone-50">
-                  <img src={shareReview.imageUrls[receiptImageIndex]} crossOrigin="anonymous" className="w-full h-40 object-cover rounded-lg" alt="음식 사진" />
+              {/* 🌟 썸네일 선택기 */}
+              {shareReview.imageUrls && shareReview.imageUrls.length > 1 && (
+                <div className="flex gap-2 mb-4 w-[300px] overflow-x-auto scrollbar-hide pb-2">
+                  {shareReview.imageUrls.map((url, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setReceiptImageIndex(idx)}
+                      className={`w-12 h-12 shrink-0 rounded-lg border-2 transition-all cursor-pointer overflow-hidden ${idx === receiptImageIndex ? 'border-orange-500 scale-110 shadow-md' : 'border-transparent opacity-50 hover:opacity-100'}`}
+                    >
+                      <img src={url} crossOrigin="anonymous" className="w-full h-full object-cover" alt={`thumb-${idx}`} />
+                    </button>
+                  ))}
                 </div>
               )}
 
-              <div className="space-y-2 mb-4">
-                <div className="flex justify-between items-end border-b border-stone-100 pb-1">
-                  <span className="text-[11px] text-stone-400 font-bold">STORE</span>
-                  <span className="text-lg font-black text-stone-800 truncate pl-4">{shareReview.storeName}</span>
-                </div>
-                <div className="flex justify-between items-end border-b border-stone-100 pb-1">
-                  <span className="text-[11px] text-stone-400 font-bold">MENU</span>
-                  <span className="text-sm font-bold text-stone-600 truncate pl-4">{shareReview.menu}</span>
-                </div>
-                <div className="flex justify-between items-end pb-1">
-                  <span className="text-[11px] text-stone-400 font-bold">RATING</span>
-                  <span className="text-sm font-bold text-amber-500">{"★".repeat(shareReview.rating)}{"☆".repeat(5 - shareReview.rating)}</span>
-                </div>
-              </div>
-
-              <div className="border-t-2 border-dashed border-stone-300 pt-4 mb-2">
-                <p className="text-sm font-medium text-stone-700 italic text-center break-keep leading-relaxed bg-stone-50 p-3 rounded-xl">
-                  "{shareReview.comment}"
-                </p>
-              </div>
-
-              {/* 🌟 마법의 QR 코드 영역 (스캔 시 바로 맛집 임포트!) */}
-              <div className="flex flex-col items-center justify-center mt-6 mb-2">
-                <div className="p-1.5 bg-white border border-stone-200 rounded-xl shadow-sm mb-2">
-                  <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`${window.location.origin}/?uid=${user?.uid}&rid=${shareReview.id}`)}`}
-                    alt="맛집 저장 QR"
-                    crossOrigin="anonymous"
-                    className="w-16 h-16 opacity-90"
-                  />
-                </div>
-                <p className="text-[10px] text-stone-500 font-bold tracking-widest">SCAN TO SAVE</p>
-                <p className="text-[9px] text-stone-400 font-bold tracking-widest uppercase mt-1">today-food.vercel.app</p>
-              </div>
-
-              {/* 영수증 아랫부분 지그재그 */}
-              <div className="absolute bottom-0 left-0 right-0 h-2 bg-transparent rotate-180" style={{ backgroundImage: "linear-gradient(-45deg, transparent 4px, white 4px), linear-gradient(45deg, transparent 4px, white 4px)", backgroundSize: "8px 8px" }} />
-            </div>
-
-            {/* 🌟 목적별로 완벽하게 분리된 공유 버튼들 */}
-            <div className="flex flex-col gap-2 w-full max-w-[300px] mt-6">
-              <button
-                onClick={handleKakaoShare}
-                className="w-full bg-[#FEE500] hover:bg-[#FDD800] text-stone-900 font-black py-3.5 rounded-xl shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+              {/* 영수증 캡처 영역 */}
+              <div
+                ref={receiptRef}
+                className="bg-white w-[300px] p-6 shadow-2xl relative overflow-hidden"
+                style={{ fontFamily: "'Noto Sans KR', sans-serif" }}
               >
-                <MessageCircle size={18} className="fill-stone-900" />
-                카카오톡으로 공유하기
-              </button>
+                <div className="absolute top-0 left-0 right-0 h-2 bg-transparent" style={{ backgroundImage: "linear-gradient(-45deg, transparent 4px, white 4px), linear-gradient(45deg, transparent 4px, white 4px)", backgroundSize: "8px 8px" }} />
 
-              <div className="flex gap-2">
+                <div className="border-b-2 border-dashed border-stone-300 pb-4 mb-4 text-center mt-2">
+                  <h2 className="text-2xl font-black text-stone-800 tracking-tighter uppercase">TODAY FOOD</h2>
+                  <p className="text-[10px] text-stone-500 font-medium mt-1">맛있는 기억을 기록하다</p>
+                </div>
+
+                {shareReview.imageUrls && shareReview.imageUrls[receiptImageIndex] && (
+                  <div className="mb-4 rounded-xl border border-stone-200 p-1 bg-stone-50">
+                    <img src={shareReview.imageUrls[receiptImageIndex]} crossOrigin="anonymous" className="w-full h-40 object-cover rounded-lg" alt="음식 사진" />
+                  </div>
+                )}
+
+                <div className="space-y-2 mb-4">
+                  <div className="flex justify-between items-end border-b border-stone-100 pb-1">
+                    <span className="text-[11px] text-stone-400 font-bold">STORE</span>
+                    <span className="text-lg font-black text-stone-800 truncate pl-4">{shareReview.storeName}</span>
+                  </div>
+                  <div className="flex justify-between items-end border-b border-stone-100 pb-1">
+                    <span className="text-[11px] text-stone-400 font-bold">MENU</span>
+                    <span className="text-sm font-bold text-stone-600 truncate pl-4">{shareReview.menu}</span>
+                  </div>
+                  <div className="flex justify-between items-end pb-1">
+                    <span className="text-[11px] text-stone-400 font-bold">RATING</span>
+                    <span className="text-sm font-bold text-amber-500">{"★".repeat(shareReview.rating)}{"☆".repeat(5 - shareReview.rating)}</span>
+                  </div>
+                </div>
+
+                <div className="border-t-2 border-dashed border-stone-300 pt-4 mb-2">
+                  <p className="text-sm font-medium text-stone-700 italic text-center break-keep leading-relaxed bg-stone-50 p-3 rounded-xl">
+                    "{shareReview.comment}"
+                  </p>
+                </div>
+
+                {/* QR 코드 영역 */}
+                <div className="flex flex-col items-center justify-center mt-6 mb-2">
+                  <div className="p-1.5 bg-white border border-stone-200 rounded-xl shadow-sm mb-2">
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`${window.location.origin}/?uid=${user?.uid}&rid=${shareReview.id}`)}`}
+                      alt="맛집 저장 QR"
+                      crossOrigin="anonymous"
+                      className="w-16 h-16 opacity-90"
+                    />
+                  </div>
+                  <p className="text-[10px] text-stone-500 font-bold tracking-widest">SCAN TO SAVE</p>
+                  <p className="text-[9px] text-stone-400 font-bold tracking-widest uppercase mt-1">today-food.vercel.app</p>
+                </div>
+
+                <div className="absolute bottom-0 left-0 right-0 h-2 bg-transparent rotate-180" style={{ backgroundImage: "linear-gradient(-45deg, transparent 4px, white 4px), linear-gradient(45deg, transparent 4px, white 4px)", backgroundSize: "8px 8px" }} />
+              </div>
+
+              {/* 🌟 수정된 모바일 닫기 버튼 및 공유 액션 버튼들 */}
+              <div className="flex flex-col gap-2 w-full max-w-[300px] mt-6 shrink-0">
                 <button
-                  onClick={handleDownloadReceipt}
-                  disabled={isGeneratingImage}
-                  className="flex-1 bg-white hover:bg-stone-50 text-stone-800 text-sm font-bold py-3.5 rounded-xl shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                  onClick={handleKakaoShare}
+                  className="w-full bg-[#FEE500] hover:bg-[#FDD800] text-stone-900 font-black py-3.5 rounded-xl shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2"
                 >
-                  {isGeneratingImage ? <Loader2 size={16} className="animate-spin text-orange-500" /> : <Download size={16} className="text-orange-500" />}
-                  이미지 저장
+                  <MessageCircle size={18} className="fill-stone-900" />
+                  카카오톡으로 공유하기
                 </button>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleDownloadReceipt}
+                    disabled={isGeneratingImage}
+                    className="flex-1 bg-white hover:bg-stone-50 text-stone-800 text-sm font-bold py-3.5 rounded-xl shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    {isGeneratingImage ? <Loader2 size={16} className="animate-spin text-orange-500" /> : <Download size={16} className="text-orange-500" />}
+                    이미지 저장
+                  </button>
+                  <button
+                    onClick={handleCopyLink}
+                    className="flex-1 bg-white hover:bg-stone-50 text-stone-800 text-sm font-bold py-3.5 rounded-xl shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <Copy size={16} className="text-blue-500" />
+                    링크 복사
+                  </button>
+                </div>
+
+                {/* 하단 닫기 버튼 추가! */}
                 <button
-                  onClick={handleCopyLink}
-                  className="flex-1 bg-white hover:bg-stone-50 text-stone-800 text-sm font-bold py-3.5 rounded-xl shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                  onClick={() => setShareReview(null)}
+                  className="w-full bg-stone-700 hover:bg-stone-800 text-white text-sm font-bold py-3.5 rounded-xl shadow-md transition-all active:scale-95 cursor-pointer mt-1"
                 >
-                  <Copy size={16} className="text-blue-500" />
-                  링크 복사
+                  닫기
                 </button>
               </div>
-            </div>
 
+            </div>
           </div>
         </div>
       )}
@@ -1227,7 +1265,7 @@ export default function Home() {
                   </div>
                 </div>
               </div>
-              <CategorySelector value={editCategory} onChange={setEditCategory} showCustom={editShowCustomCategory} onToggleCustom={() => setEditShowCustomCategory(!editShowCustomCategory)} customValue={editCustomCategory} onCustomChange={setEditCustomCategory} availableCats={knownCategories} />
+              <CategorySelector value={editCategory} onChange={setEditCategory} showCustom={editShowCustomCategory} onToggleCustom={() => setEditShowCustomCategory(!editShowCustomCategory)} customValue={editCustomCategory} onCustomChange={setCustomCategory} availableCats={knownCategories} />
 
               <MultiImagePicker existingUrls={editExistingUrls} newPreviews={editImagePreviews} onSelect={(e: any, total: number) => handleImagesSelect(e, total, setEditImageFiles, setEditImagePreviews)} onRemoveExisting={(idx: number) => setEditExistingUrls(prev => prev.filter((_, i) => i !== idx))} onRemoveNew={(idx: number) => { setEditImageFiles(prev => prev.filter((_, i) => i !== idx)); setEditImagePreviews(prev => prev.filter((_, i) => i !== idx)); }} />
 
@@ -1241,7 +1279,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* 🏅 방대한 뱃지 컬렉션 (도감) 모달 */}
+      {/* 🏅 방대한 뱃지 컬렉션 (도감) 모달 (업데이트: 대표 뱃지 선택 기능 추가) */}
       {isBadgeModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" onClick={() => setIsBadgeModalOpen(false)}>
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
@@ -1264,8 +1302,8 @@ export default function Home() {
               </div>
             ) : (
               <>
-                {/* 🌟 전체 수집 진행도 요약 UI */}
-                <div className="bg-orange-50 border border-orange-100 rounded-2xl p-4 mb-4 shrink-0 flex items-center justify-between">
+                {/* 전체 수집 진행도 요약 UI */}
+                <div className="bg-orange-50 border border-orange-100 rounded-2xl p-4 mb-3 shrink-0 flex items-center justify-between">
                   <div>
                     <p className="text-xs font-bold text-orange-600 mb-0.5">나의 수집 진행도</p>
                     <p className="text-sm font-black text-stone-800">
@@ -1278,10 +1316,14 @@ export default function Home() {
                   </div>
                 </div>
 
+                <p className="text-[11px] text-stone-500 font-bold text-center bg-stone-50 py-1.5 rounded-lg mb-4 shrink-0">
+                  💡 달성한 뱃지를 클릭해 대표 뱃지로 설정해보세요!
+                </p>
+
                 {/* 탭 메뉴 */}
                 <div className="flex border-b border-stone-100 mb-4 shrink-0">
-                  <button onClick={() => setBadgeTab("general")} className={`flex-1 pb-2 font-bold text-sm border-b-2 transition-colors cursor-pointer ${badgeTab === "general" ? "border-orange-500 text-orange-500" : "border-transparent text-stone-400 hover:text-stone-600"}`}>🏆 전체 칭호</button>
-                  <button onClick={() => setBadgeTab("category")} className={`flex-1 pb-2 font-bold text-sm border-b-2 transition-colors cursor-pointer ${badgeTab === "category" ? "border-orange-500 text-orange-500" : "border-transparent text-stone-400 hover:text-stone-600"}`}>🏷️ 카테고리별</button>
+                  <button onClick={() => setBadgeTab("general")} className={`flex-1 pb-2 font-bold text-sm border-b-2 transition-colors cursor-pointer ${badgeTab === "general" ? "border-orange-500 text-orange-500" : "border-transparent text-stone-400 hover:text-stone-600"}`}>🏆 미식가 등급</button>
+                  <button onClick={() => setBadgeTab("category")} className={`flex-1 pb-2 font-bold text-sm border-b-2 transition-colors cursor-pointer ${badgeTab === "category" ? "border-orange-500 text-orange-500" : "border-transparent text-stone-400 hover:text-stone-600"}`}>🏷️ 카테고리 뱃지</button>
                 </div>
 
                 <div className="overflow-y-auto scrollbar-hide flex-1 pr-1 pb-2">
@@ -1289,15 +1331,23 @@ export default function Home() {
                     <div className="space-y-3">
                       {GENERAL_BADGES.map((badge, idx) => {
                         const isUnlocked = badgeStats.total >= badge.threshold;
+                        const isSelected = displayBadge.title === badge.title;
+
                         return (
-                          <div key={idx} className={`flex items-center gap-4 p-3 rounded-2xl border transition-all ${isUnlocked ? badge.bg : 'bg-stone-50 border-stone-100 grayscale opacity-40'}`}>
+                          <div
+                            key={idx}
+                            onClick={() => isUnlocked && handleSelectBadge(badge, 'general')}
+                            className={`flex items-center gap-4 p-3 rounded-2xl border transition-all ${isUnlocked ? (isSelected ? 'border-orange-500 bg-orange-50 ring-2 ring-orange-200 cursor-pointer' : `${badge.bg} cursor-pointer hover:scale-[1.02]`) : 'bg-stone-50 border-stone-100 grayscale opacity-40'}`}
+                          >
                             <div className="text-3xl drop-shadow-sm shrink-0 w-12 text-center">{isUnlocked ? badge.icon : "🔒"}</div>
                             <div className="flex-1 min-w-0">
                               <div className="flex justify-between items-center mb-0.5">
                                 <span className={`font-black text-sm ${isUnlocked ? badge.color : 'text-stone-500'}`}>{badge.title}</span>
-                                <span className="text-[10px] font-bold text-stone-400 bg-white px-2 py-0.5 rounded-md shadow-sm">
-                                  {isUnlocked ? `${badge.threshold}곳 달성` : `${badge.threshold}곳 필요`}
-                                </span>
+                                {isUnlocked ? (
+                                  isSelected ? <Check size={16} className="text-orange-500" /> : <span className="text-[10px] font-bold text-stone-400 bg-white px-2 py-0.5 rounded shadow-sm">선택</span>
+                                ) : (
+                                  <span className="text-[10px] font-bold text-stone-400 bg-white px-2 py-0.5 rounded-md shadow-sm">{badge.threshold}곳 필요</span>
+                                )}
                               </div>
                               <p className="text-[11px] font-medium text-stone-500 truncate">{badge.desc}</p>
                             </div>
@@ -1312,21 +1362,29 @@ export default function Home() {
                         return (
                           <div key={catName}>
                             <h4 className="font-extrabold text-stone-700 mb-3 flex items-center justify-between border-b border-stone-100 pb-2">
-                              <span>{catName} 뱃지</span>
+                              <span>{catName} 영역</span>
                               <span className="text-xs bg-stone-100 text-stone-500 px-2 py-1 rounded-lg">누적 <span className="text-orange-500 font-black">{count}</span>곳</span>
                             </h4>
                             <div className="grid grid-cols-1 gap-2.5">
                               {badges.map(badge => {
                                 const isUnlocked = count >= badge.threshold;
+                                const isSelected = displayBadge.title === badge.title;
+
                                 return (
-                                  <div key={badge.title} className={`flex items-center gap-3 p-3 rounded-2xl border transition-all ${isUnlocked ? 'bg-white border-orange-100 shadow-sm' : 'bg-stone-50 border-stone-100 grayscale opacity-40'}`}>
+                                  <div
+                                    key={badge.title}
+                                    onClick={() => isUnlocked && handleSelectBadge(badge, 'category')}
+                                    className={`flex items-center gap-3 p-3 rounded-2xl border transition-all ${isUnlocked ? (isSelected ? 'border-orange-500 bg-orange-50 ring-2 ring-orange-200 cursor-pointer' : 'bg-white border-orange-100 shadow-sm cursor-pointer hover:scale-[1.02]') : 'bg-stone-50 border-stone-100 grayscale opacity-40'}`}
+                                  >
                                     <div className="text-2xl drop-shadow-sm shrink-0 w-10 text-center">{isUnlocked ? badge.icon : "🔒"}</div>
                                     <div className="flex-1 min-w-0">
                                       <div className="flex justify-between items-center mb-0.5">
                                         <span className={`font-bold text-sm ${isUnlocked ? 'text-stone-800' : 'text-stone-500'}`}>{badge.title}</span>
-                                        <span className="text-[9px] font-bold text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded shadow-sm">
-                                          {isUnlocked ? `${badge.threshold}곳 달성` : `${badge.threshold}곳 필요`}
-                                        </span>
+                                        {isUnlocked ? (
+                                          isSelected ? <Check size={16} className="text-orange-500" /> : <span className="text-[9px] font-bold text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded shadow-sm">선택</span>
+                                        ) : (
+                                          <span className="text-[9px] font-bold text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded shadow-sm">{badge.threshold}곳 필요</span>
+                                        )}
                                       </div>
                                       <p className="text-[11px] font-medium text-stone-500 truncate">{badge.desc}</p>
                                     </div>
@@ -1377,22 +1435,22 @@ export default function Home() {
       {/* Main Content 영역 */}
       <div className="max-w-md mx-auto px-6 pt-6 pb-20 space-y-8">
 
-        {/* 🌟 미식가 뱃지 대시보드 (클릭 유도 배너) */}
+        {/* 🌟 미식가 뱃지 대시보드 (업데이트: 대표 뱃지 반영) */}
         {user && !authLoading && (
           <div
             onClick={openBadgeModal}
             className="bg-white rounded-3xl p-5 shadow-sm border border-orange-100 flex items-center justify-between cursor-pointer hover:shadow-md hover:border-orange-300 transition-all group animate-in fade-in slide-in-from-top-4 duration-500"
           >
             <div className="flex items-center gap-4">
-              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-3xl shadow-inner ${getCurrentBadge(totalCount).bg}`}>
-                {getCurrentBadge(totalCount).icon}
+              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-3xl shadow-inner ${displayBadge.bg}`}>
+                {displayBadge.icon}
               </div>
               <div>
                 <p className="text-[11px] font-bold text-stone-400 mb-1 flex items-center gap-1">
-                  나의 미식가 등급 <span className="inline-block animate-bounce text-orange-500">👆</span>
+                  나의 대표 뱃지 <span className="inline-block animate-bounce text-orange-500">👆</span>
                 </p>
-                <p className={`text-lg font-black tracking-tight ${getCurrentBadge(totalCount).color}`}>
-                  {getCurrentBadge(totalCount).title}
+                <p className={`text-lg font-black tracking-tight ${displayBadge.color}`}>
+                  {displayBadge.title}
                 </p>
               </div>
             </div>
@@ -1616,7 +1674,7 @@ export default function Home() {
               </div>
             </div>
             <CategorySelector value={category} onChange={setCategory} showCustom={showCustomCategory} onToggleCustom={() => setShowCustomCategory(!showCustomCategory)} customValue={customCategory} onCustomChange={setCustomCategory} availableCats={knownCategories} />
-            <MultiImagePicker existingUrls={[]} newPreviews={imagePreviews} onSelect={(e: any, total: number) => handleImagesSelect(e, total, setImageFiles, setImagePreviews)} onRemoveNew={(idx: number) => { setImageFiles(prev => prev.filter((_, i) => i !== idx)); setImagePreviews(prev => prev.filter((_, i) => i !== idx)); }} />
+            <MultiImagePicker existingUrls={[]} newPreviews={imagePreviews} onSelect={(e: any, total: number) => handleImagesSelect(e, total, setImageFiles, setImagePreviews)} onRemoveExisting={(idx: number) => { setImageFiles(prev => prev.filter((_, i) => i !== idx)); setImagePreviews(prev => prev.filter((_, i) => i !== idx)); }} />
             <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="한줄평" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 h-24 resize-none focus:ring-2 focus:ring-orange-500 outline-none text-sm" />
             <button onClick={handleAddReview} disabled={isSubmitting} className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-xl active:scale-95 transition-all disabled:opacity-60 cursor-pointer">{isSubmitting ? "저장 중..." : "기록 저장하기"}</button>
           </section>
@@ -1661,7 +1719,6 @@ export default function Home() {
                           <p className="text-orange-500 text-sm font-semibold truncate">{review.menu} <span className="text-stone-300 mx-1">|</span> {review.category}</p>
                         </div>
                         <div className="flex gap-1 shrink-0">
-                          {/* 🚨 공유 버튼 클릭 시 영수증 모달 열기! */}
                           <button onClick={() => { setShareReview(review); setReceiptImageIndex(0); }} className="p-2 bg-stone-50 rounded-lg text-stone-400 hover:text-blue-500 cursor-pointer transition-colors" title="공유하기"><Share2 size={14} /></button>
                           <button onClick={() => openEditModal(review)} className="p-2 bg-stone-50 rounded-lg text-stone-400 hover:text-orange-500 cursor-pointer transition-colors" title="수정하기"><Pencil size={14} /></button>
                           <button onClick={() => handleDeleteReview(review.id)} className="p-2 bg-stone-50 rounded-lg text-stone-400 hover:text-red-500 cursor-pointer transition-colors" title="삭제하기"><Trash2 size={14} /></button>
