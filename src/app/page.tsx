@@ -107,6 +107,15 @@ const getMenuIconDetails = (menuName: string, category: string) => {
   return { emoji, ...theme };
 };
 
+// 🏅 리뷰 개수에 따른 미식가 뱃지 판별기
+const getUserBadge = (count: number) => {
+  if (count === 0) return { icon: "🐣", text: "맛집 병아리", color: "text-stone-500", bg: "bg-stone-100 border-stone-200" };
+  if (count < 5) return { icon: "🥄", text: "초보 미식가", color: "text-orange-600", bg: "bg-orange-100 border-orange-200" };
+  if (count < 15) return { icon: "🍽️", text: "동네 탐험가", color: "text-blue-600", bg: "bg-blue-100 border-blue-200" };
+  if (count < 30) return { icon: "🔥", text: "맛집 콜렉터", color: "text-red-600", bg: "bg-red-100 border-red-200" };
+  return { icon: "👑", text: "프로 맛집러", color: "text-amber-600", bg: "bg-amber-100 border-amber-300" };
+};
+
 interface Review {
   id: string;
   storeName: string;
@@ -136,7 +145,6 @@ export default function Home() {
 
   const [isLocating, setIsLocating] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
-  // ✅ 위치 정보를 저장할 State 추가 (미리 받아두기 위해)
   const [userLocation, setUserLocation] = useState<{ lat: number, lng: number } | null>(null);
 
   const [nearbySaved, setNearbySaved] = useState<Review[]>([]);
@@ -183,13 +191,10 @@ export default function Home() {
   const [filterCategory, setFilterCategory] = useState("전체");
   const [fullScreenData, setFullScreenData] = useState<{ urls: string[], currentIndex: number } | null>(null);
 
-  // ✅ [수정 2] 카카오톡 인앱 브라우저 감지 및 외부 브라우저(크롬/사파리) 강제 이동
   useEffect(() => {
     if (typeof window !== "undefined") {
       const userAgent = navigator.userAgent.toLowerCase();
-      // 카카오톡 내장 브라우저인지 확인
       if (userAgent.indexOf("kakaotalk") > -1) {
-        // 안드로이드/iOS 모두 작동하는 외부 브라우저 호출 스킴으로 리다이렉트
         window.location.href = "kakaotalk://web/openExternal?url=" + encodeURIComponent(window.location.href);
       }
     }
@@ -359,13 +364,11 @@ export default function Home() {
     return bestMatchCat;
   };
 
-  // ✅ [수정 3] 룰렛 돌리기 전, '위치 권한' 먼저 받도록 로직 분리
   const handleRecommend = () => {
     setLocationError(null);
     setNearbySaved([]);
     setNearbyExternal([]);
 
-    // 이미 위치 정보가 있다면 바로 룰렛 시작
     if (userLocation) {
       startRoulette(userLocation.lat, userLocation.lng);
       return;
@@ -376,16 +379,15 @@ export default function Home() {
       return;
     }
 
-    setIsLocating(true); // 위치 정보 받는 중 표시
+    setIsLocating(true);
 
-    // 위치 권한 먼저 묻기
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const lat = position.coords.latitude;
         const lng = position.coords.longitude;
-        setUserLocation({ lat, lng }); // 받아온 위치 저장
+        setUserLocation({ lat, lng });
         setIsLocating(false);
-        startRoulette(lat, lng); // 권한 허용되면 룰렛 시작!
+        startRoulette(lat, lng);
       },
       (error) => {
         let errMsg = "위치 정보를 가져올 수 없습니다.";
@@ -399,7 +401,6 @@ export default function Home() {
     );
   };
 
-  // 룰렛 돌리고 + 맛집 찾는 로직
   const startRoulette = (lat: number, lng: number) => {
     const pool = BASE_MENUS;
     setIsSpinning(true);
@@ -413,7 +414,6 @@ export default function Home() {
         const finalMenu = pool[Math.floor(Math.random() * pool.length)];
         setRecommendedMenu(finalMenu);
         setIsSpinning(false);
-        // 룰렛 끝나면 바로 주변 맛집 검색
         searchLocationBasedPlaces(finalMenu, lat, lng, sortOrder);
       }
     }, 50);
@@ -459,7 +459,6 @@ export default function Home() {
   const handleSortChange = (newSort: "accuracy" | "distance") => {
     if (sortOrder === newSort || !recommendedMenu || !userLocation) return;
     setSortOrder(newSort);
-    // 이미 저장된 userLocation을 사용하여 재검색
     searchLocationBasedPlaces(recommendedMenu, userLocation.lat, userLocation.lng, newSort);
   };
 
@@ -564,14 +563,11 @@ export default function Home() {
     catch (error) { console.error("삭제 실패:", error); alert("삭제 중 오류가 발생했습니다."); }
   };
 
-  // ✅ [수정 1] 공유 텍스트 중복 현상 방지 (깔끔하게 수정)
   const handleShareReview = async (review: Review) => {
     if (!user) return;
     const importUrl = `${window.location.origin}/?uid=${user.uid}&rid=${review.id}`;
 
-    // Title에는 직관적인 메뉴/식당 이름만
     const shareTitle = `🍽️ [오늘 뭐 먹지?] ${review.storeName}`;
-    // Text에는 부가 정보와 링크만 넣어서 중복을 최소화합니다.
     const shareText = `⭐ 별점: ${review.rating}.0\n💬 "${review.comment}"\n\n👇 아래 링크를 눌러 내 맛집 지도에 [사진]과 함께 바로 저장하세요!\n${importUrl}`;
 
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -934,7 +930,7 @@ export default function Home() {
             <form onSubmit={handleUpdateReview} className="space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-stone-600 mb-2 ml-1">가게 이름</label>
-                <input type="text" value={editStoreName} onChange={(e) => setStoreName(e.target.value)} required placeholder="가게 이름 (지역과 함께 쓰면 더 정확해요!)" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 focus:ring-2 focus:ring-orange-500/50 text-sm" />
+                <input type="text" value={editStoreName} onChange={(e) => setEditStoreName(e.target.value)} required placeholder="가게 이름 (지역과 함께 쓰면 더 정확해요!)" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 focus:ring-2 focus:ring-orange-500/50 text-sm" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -952,13 +948,16 @@ export default function Home() {
                   </div>
                 </div>
               </div>
-              <CategorySelector value={editCategory} onChange={setCategory} showCustom={editShowCustomCategory} onToggleCustom={() => setEditShowCustomCategory(!editShowCustomCategory)} customValue={editCustomCategory} onCustomChange={setCustomCategory} availableCats={knownCategories} />
-              <MultiImagePicker editExistingUrls={editExistingUrls} newPreviews={editImagePreviews} onSelect={(e: any, total: number) => handleImagesSelect(e, total, setEditImageFiles, setEditImagePreviews)} onRemoveExisting={(idx: number) => setEditExistingUrls(prev => prev.filter((_, i) => i !== idx))} onRemoveNew={(idx: number) => { setEditImageFiles(prev => prev.filter((_, i) => i !== idx)); setEditImagePreviews(prev => prev.filter((_, i) => i !== idx)); }} />
+              <CategorySelector value={editCategory} onChange={setEditCategory} showCustom={editShowCustomCategory} onToggleCustom={() => setEditShowCustomCategory(!editShowCustomCategory)} customValue={editCustomCategory} onCustomChange={setEditCustomCategory} availableCats={knownCategories} />
+
+              {/* 🚨🚨🚨 여기서 e(소문자)xistingUrls 로 수정 완료되었습니다! 🚨🚨🚨 */}
+              <MultiImagePicker existingUrls={editExistingUrls} newPreviews={editImagePreviews} onSelect={(e: any, total: number) => handleImagesSelect(e, total, setEditImageFiles, setEditImagePreviews)} onRemoveExisting={(idx: number) => setEditExistingUrls(prev => prev.filter((_, i) => i !== idx))} onRemoveNew={(idx: number) => { setEditImageFiles(prev => prev.filter((_, i) => i !== idx)); setEditImagePreviews(prev => prev.filter((_, i) => i !== idx)); }} />
+
               <div>
                 <label className="block text-sm font-semibold text-stone-600 mb-2 ml-1">한줄평</label>
-                <textarea value={editComment} onChange={(e) => setComment(e.target.value)} required className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 h-24 resize-none focus:ring-2 focus:ring-orange-500/50 text-sm" />
+                <textarea value={editComment} onChange={(e) => setEditComment(e.target.value)} required className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 h-24 resize-none focus:ring-2 focus:ring-orange-500/50 text-sm" />
               </div>
-              <button type="submit" disabled={isUpdating} className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3.5 px-6 rounded-xl shadow-md disabled:opacity-60 cursor-pointer">{isSubmitting ? "저장 중..." : "수정 완료"}</button>
+              <button type="submit" disabled={isUpdating} className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3.5 px-6 rounded-xl shadow-md disabled:opacity-60 cursor-pointer">{isUpdating ? "저장 중..." : "수정 완료"}</button>
             </form>
           </div>
         </div>
@@ -974,15 +973,26 @@ export default function Home() {
           {!authLoading && (
             <div>
               {user ? (
-                <div className="flex items-center gap-2">
-                  {user.photoURL ? (
-                    <img src={user.photoURL} alt="profile" className="w-8 h-8 rounded-full border-2 border-orange-200 object-cover" />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full border-2 border-orange-200 bg-orange-100 flex items-center justify-center text-orange-500 shrink-0">
-                      <User size={16} />
-                    </div>
-                  )}
-                  <button onClick={handleLogout} className="text-xs font-semibold text-stone-500 bg-stone-100 hover:bg-stone-200 px-2 py-1 rounded-lg cursor-pointer">로그아웃</button>
+                <div className="flex items-center gap-3">
+
+                  {/* 🌟 새로 추가된 미식가 뱃지 UI */}
+                  <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border shadow-sm transition-all hover:scale-105 cursor-default ${getUserBadge(totalCount).bg}`}>
+                    <span className="text-sm drop-shadow-sm">{getUserBadge(totalCount).icon}</span>
+                    <span className={`text-xs font-black tracking-tight ${getUserBadge(totalCount).color}`}>
+                      {getUserBadge(totalCount).text}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {user.photoURL ? (
+                      <img src={user.photoURL} alt="profile" className="w-8 h-8 rounded-full border-2 border-orange-200 object-cover" />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full border-2 border-orange-200 bg-orange-100 flex items-center justify-center text-orange-500 shrink-0">
+                        <User size={16} />
+                      </div>
+                    )}
+                    <button onClick={handleLogout} className="text-xs font-semibold text-stone-500 bg-stone-100 hover:bg-stone-200 px-2 py-1 rounded-lg cursor-pointer">로그아웃</button>
+                  </div>
                 </div>
               ) : (
                 <button onClick={() => { setAuthMode("login"); setIsAuthModalOpen(true); }} className="text-sm font-bold bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl shadow-md cursor-pointer">로그인</button>
@@ -1019,7 +1029,6 @@ export default function Home() {
             </span>
           </div>
 
-          {/* 위치 권한을 먼저 받는 개선된 추천 버튼 로직 */}
           <button onClick={handleRecommend} disabled={isSpinning || isLocating} className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70">
             <RefreshCw size={20} className={isSpinning || isLocating ? "animate-spin" : ""} />
             {isLocating ? "위치 파악 중..." : (isSpinning ? "고민 중..." : "추천받기")}
