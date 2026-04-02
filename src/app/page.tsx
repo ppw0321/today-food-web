@@ -5,16 +5,17 @@ import {
   UtensilsCrossed, Star, Plus, RefreshCw, ChefHat, MapPin,
   ExternalLink, Check, Copy, LogIn, LogOut, User, Search, Tag,
   Pencil, X, Camera, Image as ImageIcon, ChevronLeft, ChevronRight,
-  Compass, Loader2, Trash2, Mail, Lock, Eye, EyeOff, Share2, Download, MessageCircle, Users
+  Compass, Loader2, Trash2, Mail, Lock, Eye, EyeOff, Share2, Download, MessageCircle, Users, Link as LinkIcon, UserMinus, Settings
 } from "lucide-react";
 import { toPng } from 'html-to-image';
 import { auth, googleProvider, db, storage } from "@/lib/firebase";
 import {
   signInWithPopup, signOut, onAuthStateChanged, User as FirebaseUser,
-  createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail
+  createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail,
+  updateProfile
 } from "firebase/auth";
 import {
-  collection, addDoc, doc, updateDoc, deleteDoc, query, orderBy, onSnapshot, serverTimestamp, limit, where, getCountFromServer, getDoc, getDocs, setDoc, arrayUnion
+  collection, addDoc, doc, updateDoc, deleteDoc, query, orderBy, onSnapshot, serverTimestamp, limit, where, getCountFromServer, getDoc, getDocs, setDoc, arrayUnion, arrayRemove
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
@@ -146,11 +147,20 @@ export default function Home() {
   const [resetMessage, setResetMessage] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
+  // 🌟 프로필 설정 State
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [profileNickname, setProfileNickname] = useState("");
+  const [profilePhotoUrl, setProfilePhotoUrl] = useState("");
+  const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+
   // 🌟 그룹 연동 기능 State
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [partnerCode, setPartnerCode] = useState("");
   const [partnerUids, setPartnerUids] = useState<string[]>([]);
+  const [partnersData, setPartnersData] = useState<Record<string, any>>({});
   const [showGroupRecords, setShowGroupRecords] = useState(false);
+  const [selectedAuthorFilter, setSelectedAuthorFilter] = useState<string>("all"); // 전체, 내기록, 친구1, 친구2...
   const [isConnecting, setIsConnecting] = useState(false);
 
   const [pendingImport, setPendingImport] = useState<any>(null);
@@ -209,19 +219,37 @@ export default function Home() {
 
   const displayBadge = activeBadge || getCurrentBadge(totalCount);
 
-  // 파트너 정보 감시
+  // 🌟 내 정보 및 파트너 UID 감시
   useEffect(() => {
-    if (!user) { setActiveBadge(null); setPartnerUids([]); return; }
+    if (!user) { setActiveBadge(null); setPartnerUids([]); setProfileNickname(""); setProfilePhotoUrl(""); return; }
     const userDocRef = doc(db, "users", user.uid);
     const unsub = onSnapshot(userDocRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         if (data.selectedBadge) setActiveBadge(data.selectedBadge);
         if (data.partnerUids) setPartnerUids(data.partnerUids);
+        setProfileNickname(data.nickname || user.displayName || "나");
+        setProfilePhotoUrl(data.photoUrl || user.photoURL || "");
+      } else {
+        // 첫 로그인 시 유저 문서 생성
+        setDoc(userDocRef, { nickname: user.displayName || "나", photoUrl: user.photoURL || "", partnerUids: [] }, { merge: true });
       }
     });
     return () => unsub();
   }, [user]);
+
+  // 🌟 연결된 파트너들의 상세 프로필 데이터 실시간 감시
+  useEffect(() => {
+    if (partnerUids.length === 0) { setPartnersData({}); return; }
+    const unsubs = partnerUids.map(uid =>
+      onSnapshot(doc(db, "users", uid), (snap) => {
+        if (snap.exists()) {
+          setPartnersData(prev => ({ ...prev, [uid]: { ...snap.data(), uid } }));
+        }
+      })
+    );
+    return () => unsubs.forEach(unsub => unsub());
+  }, [partnerUids]);
 
   // 리뷰 불러오기 (나 + 파트너 통합)
   useEffect(() => {
@@ -232,25 +260,21 @@ export default function Home() {
 
     targetUids.forEach(uid => {
       const reviewsRef = collection(db, "users", uid, "reviews");
-      let q = query(reviewsRef, orderBy("createdAt", "desc"), limit(20));
+      let q = query(reviewsRef, orderBy("createdAt", "desc"), limit(30)); // 넉넉히
       if (filterCategory !== "전체") {
-        q = query(reviewsRef, where("category", "==", filterCategory), orderBy("createdAt", "desc"), limit(20));
+        q = query(reviewsRef, where("category", "==", filterCategory), orderBy("createdAt", "desc"), limit(30));
       }
 
-      const unsub = onSnapshot(q, async (snap) => {
+      const unsub = onSnapshot(q, (snap) => {
         let uPhoto = "";
         let uName = "친구";
 
         if (uid === user.uid) {
-          uPhoto = user.photoURL || "";
-          uName = "나";
-        } else {
-          const partnerSnap = await getDoc(doc(db, "users", uid));
-          if (partnerSnap.exists()) {
-            // 만약 user 정보에 프로필 이미지 등 저장 구조를 쓰신다면 여기서 가져옵니다.
-            // 임시 뱃지 이모지를 아이콘으로 대체
-            uPhoto = partnerSnap.data().selectedBadge?.icon || "🤝";
-          }
+          uPhoto = profilePhotoUrl;
+          uName = profileNickname;
+        } else if (partnersData[uid]) {
+          uPhoto = partnersData[uid].photoUrl || "";
+          uName = partnersData[uid].nickname || "친구";
         }
 
         const userReviews = snap.docs.map(d => ({
@@ -275,7 +299,7 @@ export default function Home() {
     });
 
     return () => unsubs.forEach(fn => fn());
-  }, [user, showGroupRecords, partnerUids, filterCategory]);
+  }, [user, showGroupRecords, partnerUids, filterCategory, profileNickname, profilePhotoUrl, partnersData]);
 
   useEffect(() => {
     const script = document.createElement("script");
@@ -285,8 +309,49 @@ export default function Home() {
     return () => { if (document.head.contains(script)) document.head.removeChild(script); };
   }, []);
 
+  // 🌟 프로필 저장 로직
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    setIsSavingProfile(true);
+    try {
+      let finalPhotoUrl = profilePhotoUrl;
+      if (profileImageFile) {
+        const storageRef = ref(storage, `users/${user.uid}/profile_${Date.now()}`);
+        await uploadBytes(storageRef, profileImageFile);
+        finalPhotoUrl = await getDownloadURL(storageRef);
+      }
+
+      await setDoc(doc(db, "users", user.uid), {
+        nickname: profileNickname,
+        photoUrl: finalPhotoUrl
+      }, { merge: true });
+
+      setIsProfileModalOpen(false);
+      setProfileImageFile(null);
+    } catch (e) {
+      console.error(e);
+      alert("프로필 저장에 실패했습니다.");
+    }
+    setIsSavingProfile(false);
+  };
+
+  const handleProfileImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setProfileImageFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => setProfilePhotoUrl(reader.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // 🌟 친구 연동 신청 로직
   const handleConnectPartner = async () => {
     if (!user || !partnerCode || partnerCode.trim().length < 5) return;
+    if (partnerCode.trim() === user.uid) { alert("자신의 코드는 입력할 수 없습니다."); return; }
+    if (partnerUids.includes(partnerCode.trim())) { alert("이미 연결된 친구입니다."); return; }
+
     setIsConnecting(true);
     try {
       const partnerDoc = await getDoc(doc(db, "users", partnerCode.trim()));
@@ -294,21 +359,38 @@ export default function Home() {
         alert("유효하지 않은 연결 코드입니다. 친구의 코드를 다시 확인해 주세요!");
         setIsConnecting(false); return;
       }
+
       const myRef = doc(db, "users", user.uid);
       const partnerRef = doc(db, "users", partnerCode.trim());
 
-      // 양방향 추가
       await setDoc(myRef, { partnerUids: arrayUnion(partnerCode.trim()) }, { merge: true });
       await setDoc(partnerRef, { partnerUids: arrayUnion(user.uid) }, { merge: true });
 
       alert("축하합니다! 친구와 지도가 성공적으로 연결되었습니다. 🎉");
       setPartnerCode("");
-      setIsSyncModalOpen(false);
       setShowGroupRecords(true);
     } catch (e) {
       console.error(e); alert("연결 중 오류가 발생했습니다.");
     }
     setIsConnecting(false);
+  };
+
+  // 🌟 친구 연동 끊기 로직 (실시간 분리)
+  const handleDisconnect = async (partnerUid: string, partnerName: string) => {
+    if (!user || !window.confirm(`${partnerName}님과의 맛집 지도 공유를 끊으시겠습니까?\n서로의 리스트에서 즉시 삭제됩니다.`)) return;
+    try {
+      const myRef = doc(db, "users", user.uid);
+      const partnerRef = doc(db, "users", partnerUid);
+
+      await updateDoc(myRef, { partnerUids: arrayRemove(partnerUid) });
+      await updateDoc(partnerRef, { partnerUids: arrayRemove(user.uid) });
+
+      // 만약 방금 끊은 사람 필터가 적용중이었다면 'all'로 초기화
+      if (selectedAuthorFilter === partnerUid) setSelectedAuthorFilter("all");
+
+    } catch (e) {
+      console.error(e); alert("연결 해제 중 오류가 발생했습니다.");
+    }
   };
 
   const openBadgeModal = async () => {
@@ -326,17 +408,6 @@ export default function Home() {
       setBadgeStats({ total: snap.size, categories: counts });
     } catch (e) { console.error(e); }
     setIsLoadingBadges(false);
-  };
-
-  const handleSelectBadge = async (badge: any, type: 'general' | 'category') => {
-    if (!user) return;
-    const userDocRef = doc(db, "users", user.uid);
-    await setDoc(userDocRef, {
-      selectedBadge: {
-        icon: badge.icon, title: badge.title, color: badge.color || "text-stone-800",
-        bg: badge.bg || (type === 'category' ? "bg-white border-stone-200" : "bg-stone-100 border-stone-200")
-      }
-    }, { merge: true });
   };
 
   const totalBadgesCount = GENERAL_BADGES.length + Object.values(CATEGORY_BADGES).reduce((acc, curr) => acc + curr.length, 0);
@@ -403,9 +474,16 @@ export default function Home() {
     return () => unsubscribe();
   }, []);
 
-  const handleFilterChange = (cat: string) => { setFilterCategory(cat); setReviewLimit(5); };
   const filterOptions = useMemo(() => ["전체", ...knownCategories], [knownCategories]);
-  const filteredReviews = reviews;
+
+  // 🌟 작성자 칩 필터링 적용된 최종 뷰 데이터
+  const filteredReviews = useMemo(() => {
+    return reviews.filter(r => {
+      if (!showGroupRecords && r.userId !== user?.uid) return false;
+      if (showGroupRecords && selectedAuthorFilter !== "all" && r.userId !== selectedAuthorFilter) return false;
+      return true;
+    });
+  }, [reviews, showGroupRecords, selectedAuthorFilter, user]);
 
   const normalize = (s: string) => s.replace(/[\s()（）]/g, "").toLowerCase();
   const getMenuCategory = (menuName: string): string | null => {
@@ -555,7 +633,7 @@ export default function Home() {
   const handleKakaoShare = () => {
     if (!shareReview || !user) return;
     const kakao = (window as any).Kakao;
-    if (kakao && !kakao.isInitialized()) kakao.init('6d8e9624fa45bf20fe85ee7dc75aa28d');
+    if (kakao && !kakao.isInitialized()) kakao.init('6d8e9624fa45bf20fe85ee7dc75aa28d'); // 🌟 반영 완료
     if (kakao) {
       const url = `${window.location.origin}/?uid=${shareReview.userId || user.uid}&rid=${shareReview.id}`;
       kakao.Share.sendDefault({
@@ -622,11 +700,6 @@ export default function Home() {
 
   const matchedCategory = recommendedMenu ? (getMenuCategory(recommendedMenu) || "기타") : "기타";
   const iconTheme = getMenuIconDetails(recommendedMenu || "", matchedCategory);
-  const fallbackMatchedReviews = recommendedMenu && !isSpinning ? reviews.filter((r) => {
-    const kws = getKeywords(recommendedMenu);
-    const c = normalize(r.menu) + normalize(r.storeName);
-    return kws.some((kw) => c.includes(kw)) || (matchedCategory ? r.category === matchedCategory : false);
-  }) : [];
 
   const CategorySelector = ({ value, onChange, showCustom, onToggleCustom, customValue, onCustomChange, availableCats }: any) => (
     <div>
@@ -675,31 +748,108 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[#FFFDF6] text-stone-800 font-sans pb-20">
 
-      {/* 👥 친구 연동 모달 (Phase 2.1) */}
+      {/* 🌟 내 프로필 설정 모달 */}
+      {isProfileModalOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsProfileModalOpen(false)} />
+          <div className="relative bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in-95">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-black flex items-center gap-2"><Settings className="text-orange-500" /> 내 프로필 설정</h3>
+              <button onClick={() => setIsProfileModalOpen(false)} className="p-1.5 rounded-full bg-stone-100 text-stone-500"><X size={18} /></button>
+            </div>
+
+            <form onSubmit={handleSaveProfile} className="space-y-6">
+              <div className="flex flex-col items-center gap-3">
+                <div className="relative">
+                  <div className="w-24 h-24 rounded-full border-2 border-orange-200 bg-orange-50 overflow-hidden flex items-center justify-center">
+                    {profilePhotoUrl ? <img src={profilePhotoUrl} className="w-full h-full object-cover" /> : <User size={40} className="text-orange-300" />}
+                  </div>
+                  <label className="absolute bottom-0 right-0 bg-white p-2 rounded-full shadow-md border border-stone-200 cursor-pointer hover:bg-stone-50 transition-colors">
+                    <Camera size={16} className="text-stone-600" />
+                    <input type="file" accept="image/*" className="hidden" onChange={handleProfileImageSelect} />
+                  </label>
+                </div>
+                <p className="text-[10px] text-stone-400">사진을 터치해 변경하세요</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-stone-500 mb-2 uppercase tracking-wider ml-1">나의 닉네임</label>
+                <input
+                  type="text" value={profileNickname} onChange={(e) => setProfileNickname(e.target.value)} required
+                  placeholder="닉네임을 입력하세요 (예: 맛잘알 지훈)" maxLength={10}
+                  className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-orange-500 outline-none transition-all"
+                />
+              </div>
+
+              <button type="submit" disabled={isSavingProfile} className="w-full bg-stone-800 hover:bg-black text-white font-black py-4 rounded-xl shadow-lg active:scale-95 transition-all disabled:opacity-50">
+                {isSavingProfile ? <Loader2 className="animate-spin mx-auto" /> : "프로필 저장하기"}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 👥 공유 지도(파트너 연동) 모달 (Phase 2.1 고도화) */}
       {isSyncModalOpen && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsSyncModalOpen(false)} />
-          <div className="relative bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in-95">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-black flex items-center gap-2"><Users className="text-blue-500" /> 친구와 연동하기</h3>
+          <div className="relative bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center mb-4 shrink-0">
+              <h3 className="text-xl font-black flex items-center gap-2"><MapPin className="text-blue-500" fill="#E0F2FE" /> 공유 지도 만들기</h3>
               <button onClick={() => setIsSyncModalOpen(false)} className="p-1.5 rounded-full bg-stone-100 text-stone-500"><X size={18} /></button>
             </div>
-            <div className="space-y-6">
+
+            <div className="overflow-y-auto scrollbar-hide space-y-6 pb-2">
+              {/* 가치 제안 배너 */}
+              <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 text-center">
+                <p className="text-[13px] font-bold text-blue-800 leading-relaxed">서로의 코드를 입력하면<br />맛집 지도가 하나로 합쳐져요! 🗺️✨</p>
+              </div>
+
               <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100">
                 <p className="text-[11px] font-bold text-stone-400 mb-2 uppercase tracking-wider">나의 연결 코드</p>
                 <div className="flex items-center justify-between">
-                  <code className="text-lg font-black text-blue-600 tracking-widest">{user?.uid?.substring(0, 15)}...</code>
+                  <code className="text-sm font-black text-blue-600 tracking-widest bg-white px-2 py-1 rounded shadow-sm border border-stone-100">{user?.uid?.substring(0, 15)}...</code>
                   <button onClick={() => { navigator.clipboard.writeText(user?.uid || ""); alert("내 코드가 복사되었습니다!"); }} className="p-2 bg-white rounded-lg shadow-sm text-stone-400 hover:text-blue-500"><Copy size={16} /></button>
                 </div>
-                <p className="text-[10px] text-stone-400 mt-3 leading-relaxed">이 코드를 친구에게 알려주면 서로의 맛집을 공유할 수 있습니다.</p>
               </div>
+
               <div className="space-y-3">
                 <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">친구 코드 입력</p>
-                <input type="text" value={partnerCode} onChange={(e) => setPartnerCode(e.target.value)} placeholder="친구의 코드를 붙여넣기 하세요" className="w-full bg-stone-50 border border-stone-200 rounded-xl py-4 px-4 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
-                <button onClick={handleConnectPartner} disabled={isConnecting || !partnerCode} className="w-full bg-blue-500 hover:bg-blue-600 text-white font-black py-4 rounded-xl shadow-lg active:scale-95 transition-all disabled:opacity-50">
+                <input
+                  type="text" value={partnerCode} onChange={(e) => setPartnerCode(e.target.value)}
+                  placeholder="친구의 코드를 붙여넣기 하세요"
+                  className="w-full bg-white border border-stone-200 rounded-xl py-4 px-4 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm"
+                />
+                <button
+                  onClick={handleConnectPartner} disabled={isConnecting || !partnerCode}
+                  className="w-full bg-blue-500 hover:bg-blue-600 text-white font-black py-3.5 rounded-xl shadow-md active:scale-95 transition-all disabled:opacity-50"
+                >
                   {isConnecting ? <Loader2 className="animate-spin mx-auto" /> : "연결 신청하기"}
                 </button>
               </div>
+
+              {/* 🌟 현재 연결된 친구 목록 및 끊기 */}
+              {partnerUids.length > 0 && (
+                <div className="pt-4 border-t border-stone-100">
+                  <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1 mb-3">현재 연결된 친구들</p>
+                  <div className="space-y-2">
+                    {partnerUids.map(uid => {
+                      const p = partnersData[uid];
+                      return (
+                        <div key={uid} className="flex items-center justify-between bg-white border border-stone-100 p-3 rounded-xl shadow-sm">
+                          <div className="flex items-center gap-3">
+                            {p?.photoUrl ? <img src={p.photoUrl} className="w-8 h-8 rounded-full object-cover" /> : <div className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-400"><User size={14} /></div>}
+                            <span className="font-bold text-sm text-stone-700">{p?.nickname || "친구"}</span>
+                          </div>
+                          <button onClick={() => handleDisconnect(uid, p?.nickname || "친구")} className="text-[10px] font-bold bg-red-50 text-red-500 hover:bg-red-100 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors">
+                            <UserMinus size={12} /> 연결 끊기
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -750,9 +900,13 @@ export default function Home() {
             <h1 className="text-xl font-bold text-stone-800 tracking-tight">오늘 뭐 먹지?</h1>
           </div>
           {user && (
-            <div className="flex items-center gap-3">
-              <button onClick={() => setIsSyncModalOpen(true)} className={`p-2 rounded-xl ${partnerUids.length > 0 ? 'bg-blue-50 text-blue-500' : 'bg-stone-50 text-stone-400'}`}><Users size={20} /></button>
-              <button onClick={handleLogout} className="text-xs font-semibold text-stone-500 bg-stone-100 px-3 py-2 rounded-lg">로그아웃</button>
+            <div className="flex items-center gap-2.5">
+              <button onClick={() => setIsSyncModalOpen(true)} className={`p-2 rounded-full transition-colors ${partnerUids.length > 0 ? 'bg-blue-50 text-blue-500 hover:bg-blue-100' : 'bg-stone-50 text-stone-400 hover:bg-stone-100'}`}><Users size={18} /></button>
+              {/* 🌟 닉네임/프로필 영역 (클릭 시 프로필 설정) */}
+              <button onClick={() => setIsProfileModalOpen(true)} className="flex items-center gap-1.5 bg-stone-50 hover:bg-stone-100 pl-1.5 pr-3 py-1.5 rounded-full transition-colors">
+                {profilePhotoUrl ? <img src={profilePhotoUrl} className="w-6 h-6 rounded-full object-cover border border-stone-200" /> : <div className="w-6 h-6 rounded-full bg-stone-200 flex items-center justify-center text-stone-500"><User size={12} /></div>}
+                <span className="text-[11px] font-bold text-stone-600 truncate max-w-[60px]">{profileNickname}</span>
+              </button>
             </div>
           )}
         </div>
@@ -823,7 +977,7 @@ export default function Home() {
           <section className="space-y-6">
             <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between">
-                <h2 className="font-bold text-stone-800">맛집 리스트 <span className="text-orange-500">{totalCount}</span></h2>
+                <h2 className="font-bold text-stone-800">맛집 리스트 <span className="text-orange-500">{filteredReviews.length}</span></h2>
                 {partnerUids.length > 0 && (
                   <div className="flex bg-stone-100 p-1 rounded-xl shadow-inner shrink-0">
                     <button onClick={() => setShowGroupRecords(false)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${!showGroupRecords ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-400'}`}><User size={14} /> 나만 보기</button>
@@ -831,21 +985,42 @@ export default function Home() {
                   </div>
                 )}
               </div>
+
+              {/* 카테고리 필터 */}
               <div className="flex gap-2 overflow-x-auto scrollbar-hide py-1">
                 {filterOptions.map(cat => <button key={cat} onClick={() => setFilterCategory(cat)} className={`text-xs font-bold px-3 py-2 rounded-xl border whitespace-nowrap ${filterCategory === cat ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-stone-500'}`}>{cat}</button>)}
               </div>
+
+              {/* 🌟 작성자(친구) 칩 필터 (우리 기록 모드일 때만) */}
+              {showGroupRecords && partnerUids.length > 0 && (
+                <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2 pt-1 border-b border-stone-100">
+                  <button onClick={() => setSelectedAuthorFilter("all")} className={`text-[11px] font-bold px-3 py-1.5 rounded-full transition-all whitespace-nowrap border ${selectedAuthorFilter === "all" ? 'bg-stone-800 text-white border-stone-800' : 'bg-white text-stone-500 border-stone-200'}`}>전체 기록</button>
+                  <button onClick={() => setSelectedAuthorFilter(user.uid)} className={`text-[11px] font-bold px-3 py-1.5 rounded-full transition-all whitespace-nowrap border flex items-center gap-1 ${selectedAuthorFilter === user.uid ? 'bg-stone-800 text-white border-stone-800' : 'bg-white text-stone-500 border-stone-200'}`}>
+                    {profilePhotoUrl && <img src={profilePhotoUrl} className="w-3 h-3 rounded-full" />}내 픽
+                  </button>
+                  {partnerUids.map(uid => {
+                    const p = partnersData[uid];
+                    return (
+                      <button key={uid} onClick={() => setSelectedAuthorFilter(uid)} className={`text-[11px] font-bold px-3 py-1.5 rounded-full transition-all whitespace-nowrap border flex items-center gap-1 ${selectedAuthorFilter === uid ? 'bg-stone-800 text-white border-stone-800' : 'bg-white text-stone-500 border-stone-200'}`}>
+                        {p?.photoUrl && <img src={p.photoUrl} className="w-3 h-3 rounded-full" />}{p?.nickname || "친구"}픽
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
             </div>
 
-            {reviews.length === 0 ? (
+            {filteredReviews.length === 0 ? (
               <div className="py-12 text-center bg-white rounded-3xl border border-stone-100"><p className="text-stone-500 font-bold mb-1">저장된 맛집이 없어요 🥲</p></div>
             ) : (
               <div className="grid gap-6">
-                {reviews.map(review => (
-                  <div key={review.id} className="bg-white rounded-3xl overflow-hidden border border-stone-100 shadow-sm relative">
+                {filteredReviews.map(review => (
+                  <div key={review.id} className="bg-white rounded-3xl overflow-hidden border border-stone-100 shadow-sm hover:shadow-md transition-shadow relative">
 
+                    {/* 🌟 리스트 내 프로필 아이콘 노출 */}
                     {showGroupRecords && (
-                      <div className="absolute top-3 left-3 z-10 bg-white/90 backdrop-blur-sm p-1.5 rounded-full shadow-md border flex items-center gap-2 pr-3">
-                        <span className="text-[12px]">{review.userPhoto || '🙋'}</span>
+                      <div className="absolute top-3 left-3 z-10 bg-white/90 backdrop-blur-sm p-1.5 rounded-full shadow-md border border-white/50 flex items-center gap-2 pr-3">
+                        {review.userPhoto ? <img src={review.userPhoto} className="w-5 h-5 rounded-full object-cover" /> : <div className="w-5 h-5 rounded-full bg-stone-200 flex items-center justify-center text-[10px]"><User size={10} /></div>}
                         <span className="text-[10px] font-black text-stone-700">{review.userName}</span>
                       </div>
                     )}
@@ -897,7 +1072,7 @@ export default function Home() {
         )}
       </div>
 
-      {/* 📸 공유 모달 (완벽한 디자인 반영) */}
+      {/* 📸 공유 모달 */}
       {shareReview && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-6" onClick={() => setShareReview(null)}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
