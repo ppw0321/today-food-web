@@ -263,7 +263,7 @@ export default function Home() {
 
   const [isBadgeModalOpen, setIsBadgeModalOpen] = useState(false);
   const [badgeTab, setBadgeTab] = useState<"general" | "category">("general");
-  const [badgeStats, setBadgeStats] = useState<{ total: number, categories: Record<string, number> }>({ total: number: 0, categories: {} });
+  const [badgeStats, setBadgeStats] = useState<{ total: number, categories: Record<string, number> }>({ total: 0, categories: {} });
   const [isLoadingBadges, setIsLoadingBadges] = useState(false);
 
   const [shareReview, setShareReview] = useState<Review | null>(null);
