@@ -160,7 +160,7 @@ export default function Home() {
   const [partnerUids, setPartnerUids] = useState<string[]>([]);
   const [partnersData, setPartnersData] = useState<Record<string, any>>({});
   const [showGroupRecords, setShowGroupRecords] = useState(false);
-  const [selectedAuthorFilter, setSelectedAuthorFilter] = useState<string>("all"); // 전체, 내기록, 친구1, 친구2...
+  const [selectedAuthorFilter, setSelectedAuthorFilter] = useState<string>("all");
   const [isConnecting, setIsConnecting] = useState(false);
 
   const [pendingImport, setPendingImport] = useState<any>(null);
@@ -219,7 +219,7 @@ export default function Home() {
 
   const displayBadge = activeBadge || getCurrentBadge(totalCount);
 
-  // 🌟 내 정보 및 파트너 UID 감시
+  // 🌟 내 정보 및 파트너 UID 감시 (기존 유저 자동 프로필 마이그레이션 포함)
   useEffect(() => {
     if (!user) { setActiveBadge(null); setPartnerUids([]); setProfileNickname(""); setProfilePhotoUrl(""); return; }
     const userDocRef = doc(db, "users", user.uid);
@@ -228,9 +228,19 @@ export default function Home() {
         const data = docSnap.data();
         if (data.selectedBadge) setActiveBadge(data.selectedBadge);
         if (data.partnerUids) setPartnerUids(data.partnerUids);
+
+        // 기존 유저 마이그레이션: nickname이 없으면 자동으로 채워줌
+        if (data.nickname === undefined) {
+          setDoc(userDocRef, {
+            nickname: user.displayName || "나",
+            photoUrl: user.photoURL || ""
+          }, { merge: true });
+        }
+
         setProfileNickname(data.nickname || user.displayName || "나");
         setProfilePhotoUrl(data.photoUrl || user.photoURL || "");
       } else {
+        // 첫 로그인 시 유저 문서 생성
         setDoc(userDocRef, { nickname: user.displayName || "나", photoUrl: user.photoURL || "", partnerUids: [] }, { merge: true });
       }
     });
@@ -567,6 +577,29 @@ export default function Home() {
     setCustomCategory(""); setShowCustomCategory(false); setImageFiles([]); setImagePreviews([]); setImportedUrls([]);
   };
 
+  // 🌟 스크랩 모달 열기 함수 (버튼 부활의 핵심!)
+  const handleScrapPlace = (place: any) => {
+    if (!user) {
+      setAuthMode("signup");
+      setIsAuthModalOpen(true);
+      return;
+    }
+    resetForm();
+    setStoreName(place.place_name);
+    setMenu(recommendedMenu || "");
+
+    const cat = matchedCategory || "기타";
+    if (knownCategories.includes(cat)) {
+      setCategory(cat);
+      setShowCustomCategory(false);
+    } else {
+      setCategory("기타");
+      setCustomCategory(cat);
+      setShowCustomCategory(true);
+    }
+    setIsScrapModalOpen(true);
+  };
+
   const handleAddReview = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!storeName || !menu || !comment || !user) return;
@@ -797,7 +830,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* 👥 공유 지도(파트너 연동) 모달 */}
+      {/* 👥 공유 지도(파트너 연동) 모달 (Phase 2.1 고도화) */}
       {isSyncModalOpen && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsSyncModalOpen(false)} />
@@ -835,6 +868,7 @@ export default function Home() {
                 </button>
               </div>
 
+              {/* 🌟 현재 연결된 친구 목록 및 끊기 */}
               {partnerUids.length > 0 && (
                 <div className="pt-4 border-t border-stone-100">
                   <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1 mb-3">현재 연결된 친구들</p>
@@ -861,34 +895,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* 🌟 Header (로그인 버튼 복구 완료!) */}
-      <header className="bg-white sticky top-0 z-50 border-b border-orange-100 shadow-md">
-        <div className="max-w-md mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-orange-100 p-2 rounded-xl text-orange-500 shadow-sm"><ChefHat size={24} /></div>
-            <h1 className="text-xl font-bold text-stone-800 tracking-tight">오늘 뭐 먹지?</h1>
-          </div>
-
-          {/* 로그인 상태에 따른 버튼 렌더링 복구 */}
-          {!authLoading && (
-            <div className="shrink-0 pl-2">
-              {user ? (
-                <div className="flex items-center gap-2.5">
-                  <button onClick={() => setIsSyncModalOpen(true)} className={`p-2 rounded-full transition-colors ${partnerUids.length > 0 ? 'bg-blue-50 text-blue-500 hover:bg-blue-100' : 'bg-stone-50 text-stone-400 hover:bg-stone-100'}`}><Users size={18} /></button>
-                  <button onClick={() => setIsProfileModalOpen(true)} className="flex items-center gap-1.5 bg-stone-50 hover:bg-stone-100 pl-1.5 pr-3 py-1.5 rounded-full transition-colors">
-                    {profilePhotoUrl ? <img src={profilePhotoUrl} className="w-6 h-6 rounded-full object-cover border border-stone-200" /> : <div className="w-6 h-6 rounded-full bg-stone-200 flex items-center justify-center text-stone-500"><User size={12} /></div>}
-                    <span className="text-[11px] font-bold text-stone-600 truncate max-w-[60px]">{profileNickname}</span>
-                  </button>
-                </div>
-              ) : (
-                <button onClick={() => { setAuthMode("login"); setIsAuthModalOpen(true); }} className="text-sm font-bold bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl shadow-md cursor-pointer transition-colors">로그인</button>
-              )}
-            </div>
-          )}
-        </div>
-      </header>
-
-      {/* Auth Modal */}
+      {/* 🌟 Auth Modal (비회원 로그인 버튼용) */}
       {isAuthModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
@@ -924,6 +931,32 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* 🌟 Header (비회원 로그인 버튼 / 회원 프로필 버튼 모두 복구!) */}
+      <header className="bg-white sticky top-0 z-50 border-b border-orange-100 shadow-md">
+        <div className="max-w-md mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="bg-orange-100 p-2 rounded-xl text-orange-500 shadow-sm"><ChefHat size={24} /></div>
+            <h1 className="text-xl font-bold text-stone-800 tracking-tight">오늘 뭐 먹지?</h1>
+          </div>
+
+          {!authLoading && (
+            <div className="shrink-0 pl-2">
+              {user ? (
+                <div className="flex items-center gap-2.5">
+                  <button onClick={() => setIsSyncModalOpen(true)} className={`p-2 rounded-full transition-colors ${partnerUids.length > 0 ? 'bg-blue-50 text-blue-500 hover:bg-blue-100' : 'bg-stone-50 text-stone-400 hover:bg-stone-100'}`}><Users size={18} /></button>
+                  <button onClick={() => setIsProfileModalOpen(true)} className="flex items-center gap-1.5 bg-stone-50 hover:bg-stone-100 pl-1.5 pr-3 py-1.5 rounded-full transition-colors">
+                    {profilePhotoUrl ? <img src={profilePhotoUrl} className="w-6 h-6 rounded-full object-cover border border-stone-200" /> : <div className="w-6 h-6 rounded-full bg-stone-200 flex items-center justify-center text-stone-500"><User size={12} /></div>}
+                    <span className="text-[11px] font-bold text-stone-600 truncate max-w-[60px]">{profileNickname}</span>
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => { setAuthMode("login"); setIsAuthModalOpen(true); }} className="text-sm font-bold bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl shadow-md cursor-pointer transition-colors">로그인</button>
+              )}
+            </div>
+          )}
+        </div>
+      </header>
 
       <div className="max-w-md mx-auto px-6 pt-6 pb-20 space-y-8">
 
@@ -971,10 +1004,19 @@ export default function Home() {
                         <p className="text-sm font-bold text-stone-600 flex items-center gap-1.5"><Compass size={16} className="text-blue-500" />주변 {recommendedMenu} 맛집</p>
                       </div>
                       <div className="space-y-2">
+                        {/* 🌟 [+저장] 버튼 복구 완료! */}
                         {nearbyExternal.map((p, i) => (
-                          <div key={i} className="flex items-center justify-between bg-white border border-stone-100 rounded-xl px-4 py-3 shadow-sm">
-                            <a href={p.place_url} target="_blank" className="flex flex-col min-w-0 flex-1"><span className="font-bold text-stone-700 text-sm truncate">{p.place_name}</span><span className="text-[10px] text-stone-400 truncate">{p.address_name}</span></a>
-                            <span className="text-xs font-extrabold text-blue-600 bg-blue-50 px-2 py-1 rounded-md ml-2">{p.distance}m</span>
+                          <div key={i} className="flex items-center justify-between bg-white border border-stone-100 rounded-xl px-4 py-3 shadow-sm group">
+                            <a href={p.place_url} target="_blank" className="flex flex-col min-w-0 flex-1 cursor-pointer pr-2">
+                              <span className="font-bold text-stone-700 text-sm truncate group-hover:text-stone-900 transition-colors">{p.place_name}</span>
+                              <span className="text-[10px] text-stone-400 truncate">{p.address_name}</span>
+                            </a>
+                            <div className="flex flex-col items-end shrink-0 gap-1.5 ml-2">
+                              <span className="text-xs font-extrabold text-blue-600 bg-blue-50 px-2 py-1 rounded-md">{p.distance}m</span>
+                              <button onClick={() => handleScrapPlace(p)} className="text-[10px] font-bold bg-orange-500 text-white px-2 py-1 rounded hover:bg-orange-600 transition-colors cursor-pointer">
+                                + 저장
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -1068,7 +1110,7 @@ export default function Home() {
 
                     {review.imageUrls && review.imageUrls.length > 0 && (
                       <div className="flex overflow-x-auto scrollbar-hide snap-x bg-stone-100 h-48">
-                        {review.imageUrls.map((url, idx) => <img key={idx} src={url} onClick={() => setFullScreenData({ urls: review.imageUrls!, currentIndex: idx })} className="h-full w-full object-cover snap-center min-w-full" />)}
+                        {review.imageUrls.map((url, idx) => <img key={idx} src={url} onClick={() => setFullScreenData({ urls: review.imageUrls!, currentIndex: idx })} className="h-full w-full object-cover snap-center min-w-full cursor-zoom-in" />)}
                       </div>
                     )}
                     <div className="p-5 space-y-4">
