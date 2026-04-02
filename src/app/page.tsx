@@ -410,6 +410,18 @@ export default function Home() {
     setIsLoadingBadges(false);
   };
 
+  // 🌟 [추가됨] 뱃지 선택 함수
+  const handleSelectBadge = async (badge: any, type: 'general' | 'category') => {
+    if (!user) return;
+    const userDocRef = doc(db, "users", user.uid);
+    await setDoc(userDocRef, {
+      selectedBadge: {
+        icon: badge.icon, title: badge.title, color: badge.color || "text-stone-800",
+        bg: badge.bg || (type === 'category' ? "bg-white border-stone-200" : "bg-stone-100 border-stone-200")
+      }
+    }, { merge: true });
+  };
+
   const totalBadgesCount = GENERAL_BADGES.length + Object.values(CATEGORY_BADGES).reduce((acc, curr) => acc + curr.length, 0);
   const collectedGeneralCount = GENERAL_BADGES.filter(b => badgeStats.total >= b.threshold).length;
   const collectedCategoryCount = Object.entries(CATEGORY_BADGES).reduce((acc, [cat, badges]) => {
@@ -633,7 +645,7 @@ export default function Home() {
   const handleKakaoShare = () => {
     if (!shareReview || !user) return;
     const kakao = (window as any).Kakao;
-    if (kakao && !kakao.isInitialized()) kakao.init('6d8e9624fa45bf20fe85ee7dc75aa28d'); // 🌟 반영 완료
+    if (kakao && !kakao.isInitialized()) kakao.init('6d8e9624fa45bf20fe85ee7dc75aa28d');
     if (kakao) {
       const url = `${window.location.origin}/?uid=${shareReview.userId || user.uid}&rid=${shareReview.id}`;
       kakao.Share.sendDefault({
@@ -800,7 +812,6 @@ export default function Home() {
             </div>
 
             <div className="overflow-y-auto scrollbar-hide space-y-6 pb-2">
-              {/* 가치 제안 배너 */}
               <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 text-center">
                 <p className="text-[13px] font-bold text-blue-800 leading-relaxed">서로의 코드를 입력하면<br />맛집 지도가 하나로 합쳐져요! 🗺️✨</p>
               </div>
@@ -902,7 +913,6 @@ export default function Home() {
           {user && (
             <div className="flex items-center gap-2.5">
               <button onClick={() => setIsSyncModalOpen(true)} className={`p-2 rounded-full transition-colors ${partnerUids.length > 0 ? 'bg-blue-50 text-blue-500 hover:bg-blue-100' : 'bg-stone-50 text-stone-400 hover:bg-stone-100'}`}><Users size={18} /></button>
-              {/* 🌟 닉네임/프로필 영역 (클릭 시 프로필 설정) */}
               <button onClick={() => setIsProfileModalOpen(true)} className="flex items-center gap-1.5 bg-stone-50 hover:bg-stone-100 pl-1.5 pr-3 py-1.5 rounded-full transition-colors">
                 {profilePhotoUrl ? <img src={profilePhotoUrl} className="w-6 h-6 rounded-full object-cover border border-stone-200" /> : <div className="w-6 h-6 rounded-full bg-stone-200 flex items-center justify-center text-stone-500"><User size={12} /></div>}
                 <span className="text-[11px] font-bold text-stone-600 truncate max-w-[60px]">{profileNickname}</span>
@@ -986,23 +996,21 @@ export default function Home() {
                 )}
               </div>
 
-              {/* 카테고리 필터 */}
               <div className="flex gap-2 overflow-x-auto scrollbar-hide py-1">
                 {filterOptions.map(cat => <button key={cat} onClick={() => setFilterCategory(cat)} className={`text-xs font-bold px-3 py-2 rounded-xl border whitespace-nowrap ${filterCategory === cat ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-stone-500'}`}>{cat}</button>)}
               </div>
 
-              {/* 🌟 작성자(친구) 칩 필터 (우리 기록 모드일 때만) */}
               {showGroupRecords && partnerUids.length > 0 && (
                 <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2 pt-1 border-b border-stone-100">
                   <button onClick={() => setSelectedAuthorFilter("all")} className={`text-[11px] font-bold px-3 py-1.5 rounded-full transition-all whitespace-nowrap border ${selectedAuthorFilter === "all" ? 'bg-stone-800 text-white border-stone-800' : 'bg-white text-stone-500 border-stone-200'}`}>전체 기록</button>
                   <button onClick={() => setSelectedAuthorFilter(user.uid)} className={`text-[11px] font-bold px-3 py-1.5 rounded-full transition-all whitespace-nowrap border flex items-center gap-1 ${selectedAuthorFilter === user.uid ? 'bg-stone-800 text-white border-stone-800' : 'bg-white text-stone-500 border-stone-200'}`}>
-                    {profilePhotoUrl && <img src={profilePhotoUrl} className="w-3 h-3 rounded-full" />}내 픽
+                    {profilePhotoUrl && <img src={profilePhotoUrl} className="w-3 h-3 rounded-full object-cover" />}내 픽
                   </button>
                   {partnerUids.map(uid => {
                     const p = partnersData[uid];
                     return (
                       <button key={uid} onClick={() => setSelectedAuthorFilter(uid)} className={`text-[11px] font-bold px-3 py-1.5 rounded-full transition-all whitespace-nowrap border flex items-center gap-1 ${selectedAuthorFilter === uid ? 'bg-stone-800 text-white border-stone-800' : 'bg-white text-stone-500 border-stone-200'}`}>
-                        {p?.photoUrl && <img src={p.photoUrl} className="w-3 h-3 rounded-full" />}{p?.nickname || "친구"}픽
+                        {p?.photoUrl && <img src={p.photoUrl} className="w-3 h-3 rounded-full object-cover" />}{p?.nickname || "친구"}픽
                       </button>
                     )
                   })}
@@ -1017,7 +1025,6 @@ export default function Home() {
                 {filteredReviews.map(review => (
                   <div key={review.id} className="bg-white rounded-3xl overflow-hidden border border-stone-100 shadow-sm hover:shadow-md transition-shadow relative">
 
-                    {/* 🌟 리스트 내 프로필 아이콘 노출 */}
                     {showGroupRecords && (
                       <div className="absolute top-3 left-3 z-10 bg-white/90 backdrop-blur-sm p-1.5 rounded-full shadow-md border border-white/50 flex items-center gap-2 pr-3">
                         {review.userPhoto ? <img src={review.userPhoto} className="w-5 h-5 rounded-full object-cover" /> : <div className="w-5 h-5 rounded-full bg-stone-200 flex items-center justify-center text-[10px]"><User size={10} /></div>}
@@ -1163,7 +1170,7 @@ export default function Home() {
                 <input type="text" value={editMenu} onChange={(e) => setEditMenu(e.target.value)} required className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 text-sm" />
                 <div className="flex items-center justify-between bg-stone-50 border border-stone-100 rounded-xl px-3 h-[50px]">{[1, 2, 3, 4, 5].map((s) => <Star key={s} onClick={() => setEditRating(s)} size={22} className={`cursor-pointer ${editRating >= s ? 'text-amber-400 fill-amber-400' : 'text-stone-300'}`} />)}</div>
               </div>
-              <CategorySelector value={editCategory} onChange={setEditCategory} showCustom={editShowCustomCategory} onToggleCustom={() => setEditShowCustomCategory(!editShowCustomCategory)} customValue={editCustomCategory} onCustomChange={setEditCustomCategory} availableCats={knownCategories} />
+              <CategorySelector value={editCategory} onChange={setEditCategory} showCustom={editShowCustomCategory} onToggleCustom={() => setEditShowCustomCategory(!editShowCustomCategory)} customValue={editCustomCategory} onCustomChange={setCustomCategory} availableCats={knownCategories} />
               <MultiImagePicker existingUrls={editExistingUrls} newPreviews={editImagePreviews} onSelect={(e: any, t: number) => handleImagesSelect(e, t, setEditImageFiles, setEditImagePreviews)} onRemoveExisting={(idx: number) => setEditExistingUrls(p => p.filter((_, i) => i !== idx))} onRemoveNew={(idx: number) => { setEditImageFiles(p => p.filter((_, i) => i !== idx)); setEditImagePreviews(p => p.filter((_, i) => i !== idx)); }} />
               <textarea value={editComment} onChange={(e) => setEditComment(e.target.value)} required className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 h-24 resize-none text-sm" />
               <button type="submit" disabled={isUpdating} className="w-full bg-orange-500 text-white font-bold py-3.5 rounded-xl">{isUpdating ? "저장 중..." : "수정 완료"}</button>
