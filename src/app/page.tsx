@@ -217,7 +217,9 @@ export default function Home() {
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [activeBadge, setActiveBadge] = useState<{ icon: string, title: string, color: string, bg: string } | null>(null);
 
-  const displayBadge = activeBadge || getCurrentBadge(totalCount);
+  // 🌟 수정: 전체 리스트(totalCount)가 아닌, '나(user.uid)'의 리뷰 개수만 쏙 골라내서 뱃지 계산!
+  const myReviewsCount = reviews.filter(r => r.userId === user?.uid).length;
+  const displayBadge = activeBadge || getCurrentBadge(myReviewsCount);
 
   // 🌟 내 정보 및 파트너 UID 감시 (기존 유저 자동 프로필 마이그레이션 포함)
   useEffect(() => {
