@@ -231,7 +231,6 @@ export default function Home() {
         setProfileNickname(data.nickname || user.displayName || "나");
         setProfilePhotoUrl(data.photoUrl || user.photoURL || "");
       } else {
-        // 첫 로그인 시 유저 문서 생성
         setDoc(userDocRef, { nickname: user.displayName || "나", photoUrl: user.photoURL || "", partnerUids: [] }, { merge: true });
       }
     });
@@ -385,7 +384,6 @@ export default function Home() {
       await updateDoc(myRef, { partnerUids: arrayRemove(partnerUid) });
       await updateDoc(partnerRef, { partnerUids: arrayRemove(user.uid) });
 
-      // 만약 방금 끊은 사람 필터가 적용중이었다면 'all'로 초기화
       if (selectedAuthorFilter === partnerUid) setSelectedAuthorFilter("all");
 
     } catch (e) {
@@ -410,7 +408,6 @@ export default function Home() {
     setIsLoadingBadges(false);
   };
 
-  // 🌟 [추가됨] 뱃지 선택 함수
   const handleSelectBadge = async (badge: any, type: 'general' | 'category') => {
     if (!user) return;
     const userDocRef = doc(db, "users", user.uid);
@@ -488,7 +485,6 @@ export default function Home() {
 
   const filterOptions = useMemo(() => ["전체", ...knownCategories], [knownCategories]);
 
-  // 🌟 작성자 칩 필터링 적용된 최종 뷰 데이터
   const filteredReviews = useMemo(() => {
     return reviews.filter(r => {
       if (!showGroupRecords && r.userId !== user?.uid) return false;
@@ -801,7 +797,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* 👥 공유 지도(파트너 연동) 모달 (Phase 2.1 고도화) */}
+      {/* 👥 공유 지도(파트너 연동) 모달 */}
       {isSyncModalOpen && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsSyncModalOpen(false)} />
@@ -839,7 +835,6 @@ export default function Home() {
                 </button>
               </div>
 
-              {/* 🌟 현재 연결된 친구 목록 및 끊기 */}
               {partnerUids.length > 0 && (
                 <div className="pt-4 border-t border-stone-100">
                   <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1 mb-3">현재 연결된 친구들</p>
@@ -865,6 +860,33 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* 🌟 Header (로그인 버튼 복구 완료!) */}
+      <header className="bg-white sticky top-0 z-50 border-b border-orange-100 shadow-md">
+        <div className="max-w-md mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="bg-orange-100 p-2 rounded-xl text-orange-500 shadow-sm"><ChefHat size={24} /></div>
+            <h1 className="text-xl font-bold text-stone-800 tracking-tight">오늘 뭐 먹지?</h1>
+          </div>
+
+          {/* 로그인 상태에 따른 버튼 렌더링 복구 */}
+          {!authLoading && (
+            <div className="shrink-0 pl-2">
+              {user ? (
+                <div className="flex items-center gap-2.5">
+                  <button onClick={() => setIsSyncModalOpen(true)} className={`p-2 rounded-full transition-colors ${partnerUids.length > 0 ? 'bg-blue-50 text-blue-500 hover:bg-blue-100' : 'bg-stone-50 text-stone-400 hover:bg-stone-100'}`}><Users size={18} /></button>
+                  <button onClick={() => setIsProfileModalOpen(true)} className="flex items-center gap-1.5 bg-stone-50 hover:bg-stone-100 pl-1.5 pr-3 py-1.5 rounded-full transition-colors">
+                    {profilePhotoUrl ? <img src={profilePhotoUrl} className="w-6 h-6 rounded-full object-cover border border-stone-200" /> : <div className="w-6 h-6 rounded-full bg-stone-200 flex items-center justify-center text-stone-500"><User size={12} /></div>}
+                    <span className="text-[11px] font-bold text-stone-600 truncate max-w-[60px]">{profileNickname}</span>
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => { setAuthMode("login"); setIsAuthModalOpen(true); }} className="text-sm font-bold bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl shadow-md cursor-pointer transition-colors">로그인</button>
+              )}
+            </div>
+          )}
+        </div>
+      </header>
 
       {/* Auth Modal */}
       {isAuthModalOpen && (
@@ -902,25 +924,6 @@ export default function Home() {
           </div>
         </div>
       )}
-
-      {/* Header */}
-      <header className="bg-white sticky top-0 z-50 border-b border-orange-100 shadow-md">
-        <div className="max-w-md mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-orange-100 p-2 rounded-xl text-orange-500 shadow-sm"><ChefHat size={24} /></div>
-            <h1 className="text-xl font-bold text-stone-800 tracking-tight">오늘 뭐 먹지?</h1>
-          </div>
-          {user && (
-            <div className="flex items-center gap-2.5">
-              <button onClick={() => setIsSyncModalOpen(true)} className={`p-2 rounded-full transition-colors ${partnerUids.length > 0 ? 'bg-blue-50 text-blue-500 hover:bg-blue-100' : 'bg-stone-50 text-stone-400 hover:bg-stone-100'}`}><Users size={18} /></button>
-              <button onClick={() => setIsProfileModalOpen(true)} className="flex items-center gap-1.5 bg-stone-50 hover:bg-stone-100 pl-1.5 pr-3 py-1.5 rounded-full transition-colors">
-                {profilePhotoUrl ? <img src={profilePhotoUrl} className="w-6 h-6 rounded-full object-cover border border-stone-200" /> : <div className="w-6 h-6 rounded-full bg-stone-200 flex items-center justify-center text-stone-500"><User size={12} /></div>}
-                <span className="text-[11px] font-bold text-stone-600 truncate max-w-[60px]">{profileNickname}</span>
-              </button>
-            </div>
-          )}
-        </div>
-      </header>
 
       <div className="max-w-md mx-auto px-6 pt-6 pb-20 space-y-8">
 
@@ -982,6 +985,37 @@ export default function Home() {
             </div>
           )}
         </section>
+
+        {/* 🌟 비회원용 안내 배너 (복구 완료!) */}
+        {!user && !authLoading && (
+          <section className="relative bg-white rounded-3xl border border-stone-100 overflow-hidden shadow-sm mt-12 mb-12 animate-in fade-in-up duration-500">
+            <div className="p-6 filter blur-[6px] opacity-40 select-none pointer-events-none space-y-6">
+              <div className="flex items-center gap-2 mb-2"><Star className="text-stone-400 fill-stone-400" size={18} /><h2 className="font-bold text-stone-800">맛집 직접 기록</h2></div>
+              <div className="w-full bg-stone-100 rounded-xl h-12"></div>
+              <div className="pt-6 border-t border-stone-100 mt-6">
+                <h2 className="font-bold text-stone-800 mb-4">내 맛집 리스트 <span className="text-orange-500">12</span></h2>
+                <div className="bg-white rounded-3xl border border-stone-100 overflow-hidden shadow-sm mb-4">
+                  <img src="https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&q=80&w=600" className="w-full h-40 object-cover" alt="food" />
+                  <div className="p-5 space-y-3"><div className="flex justify-between items-start"><div className="space-y-1.5"><div className="w-32 h-5 bg-stone-200 rounded-md"></div><div className="w-20 h-4 bg-stone-100 rounded-md"></div></div><div className="w-12 h-6 bg-stone-200 rounded-md"></div></div></div>
+                </div>
+              </div>
+            </div>
+
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/50 p-6 text-center backdrop-blur-[1px]">
+              <div className="bg-white p-4 rounded-full shadow-lg mb-5 text-orange-500 border border-orange-100">
+                <Lock size={30} className="stroke-[2.5]" />
+              </div>
+              <h3 className="text-xl font-black text-stone-900 mb-2.5 tracking-tight">나만의 맛집 지도 만들기</h3>
+              <p className="text-sm text-stone-700 mb-7 font-medium leading-relaxed break-keep inline-block max-w-[85%]">
+                잊고 싶지 않은 맛집 사진과 한줄평을 차곡차곡 기록해 보세요!
+              </p>
+              <button onClick={() => { setAuthMode('signup'); setIsAuthModalOpen(true); }} className="bg-stone-800 hover:bg-black text-white font-bold py-4 px-10 rounded-2xl shadow-xl transition-transform hover:scale-105 active:scale-95 cursor-pointer flex items-center gap-2">
+                🚀 3초 만에 시작하기
+              </button>
+              <p className="text-xs text-stone-500 mt-5 font-medium">이미 계정이 있으신가요? <button onClick={() => { setAuthMode('login'); setIsAuthModalOpen(true); }} className="font-bold text-stone-700 hover:text-orange-500 underline underline-offset-2 transition-colors cursor-pointer">로그인</button></p>
+            </div>
+          </section>
+        )}
 
         {user && (
           <section className="space-y-6">
