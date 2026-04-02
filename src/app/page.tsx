@@ -271,13 +271,10 @@ export default function Home() {
   const receiptRef = useRef<HTMLDivElement>(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
 
-  // 🌟 유저가 선택한 '대표 뱃지' 상태
   const [activeBadge, setActiveBadge] = useState<{ icon: string, title: string, color: string, bg: string } | null>(null);
 
-  // 현재 노출할 뱃지 결정 (선택한 뱃지가 없으면 기본 레벨 뱃지 노출)
   const displayBadge = activeBadge || getCurrentBadge(totalCount);
 
-  // 유저 로그인 시 대표 뱃지 설정 불러오기
   useEffect(() => {
     if (!user) {
       setActiveBadge(null);
@@ -292,7 +289,6 @@ export default function Home() {
     return () => unsub();
   }, [user]);
 
-  // 카카오 SDK 로드
   useEffect(() => {
     const script = document.createElement("script");
     script.src = "https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js";
@@ -318,7 +314,6 @@ export default function Home() {
     setIsLoadingBadges(false);
   };
 
-  // 🌟 대표 뱃지 선택 함수
   const handleSelectBadge = async (badge: any, type: 'general' | 'category') => {
     if (!user) return;
     const userDocRef = doc(db, "users", user.uid);
@@ -542,7 +537,7 @@ export default function Home() {
       (error) => {
         let errMsg = "위치 정보를 가져올 수 없습니다.";
         if (error.code === 1) errMsg = "위치 권한이 거부되었습니다. 기기의 설정에서 위치 권한을 허용해 주세요.";
-        if (error.code === 2) errMsg = "현재 위치 파 파악 불가. GPS 신호가 약합니다.";
+        if (error.code === 2) errMsg = "현재 위치 파악 불가. GPS 신호가 약합니다.";
         if (error.code === 3) errMsg = "위치 요청 시간이 초과되었습니다.";
         setLocationError(errMsg);
         setIsLocating(false);
@@ -721,7 +716,7 @@ export default function Home() {
 
     try {
       await navigator.clipboard.writeText(`${shareTitle}\n${shareText}`);
-      alert("맛집 링크가 복사되었습니다! 카카오톡이나 인스타에 붙여넣기 해주세요.");
+      alert("맛집 링크가 복사되었습니다! 원하는 곳에 붙여넣기 해주세요.");
     } catch (err) {
       console.error('클립보드 복사 실패:', err);
       alert("공유하기를 지원하지 않는 환경입니다.");
@@ -759,7 +754,7 @@ export default function Home() {
     const kakao = (window as any).Kakao;
 
     if (kakao && !kakao.isInitialized()) {
-      // 🚨 카카오 디벨로퍼스에서 발급받은 'JavaScript 키'를 여기에 넣으세요! 🚨
+      // 🚨 카카오 디벨로퍼스에서 발급받은 'JavaScript 키'를 꼭 넣어주세요! 🚨
       kakao.init('6d8e9624fa45bf20fe85ee7dc75aa28d');
     }
 
@@ -1046,122 +1041,128 @@ export default function Home() {
         </div>
       )}
 
-      {/* 📸 감성 영수증 공유 모달 (업데이트: 스크롤 무관 고정형 X 버튼) */}
+      {/* 📸 감성 영수증 공유 모달 (완벽한 모바일 대응 + UI 통일) */}
       {shareReview && (
-        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/60 backdrop-blur-md" onClick={() => setShareReview(null)}>
+        <div className="fixed inset-0 z-[100] flex flex-col" onClick={() => setShareReview(null)}>
+          {/* 어두운 배경 */}
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-md" />
 
-          {/* 🌟 핵심 UI 개선: 스크롤과 무관하게 항상 우측 상단에 떠 있는 닫기(X) 버튼 */}
-          <button
-            onClick={() => setShareReview(null)}
-            className="fixed top-5 right-5 sm:top-8 sm:right-8 z-[120] p-2.5 bg-stone-800/60 text-white rounded-full hover:bg-black/80 backdrop-blur-md transition-all cursor-pointer shadow-lg"
-          >
-            <X size={22} strokeWidth={3} />
-          </button>
+          {/* 🌟 상단 헤더 (통일된 X 버튼 배치) */}
+          <div className="relative z-10 flex justify-between items-center w-full max-w-md mx-auto p-5" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <Share2 size={18} className="text-orange-400" /> 맛집 공유하기
+            </h3>
+            <button
+              onClick={() => setShareReview(null)}
+              className="p-1.5 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 transition-colors cursor-pointer"
+            >
+              <X size={18} />
+            </button>
+          </div>
 
-          <div className="min-h-full flex flex-col items-center justify-center p-4 py-20">
-            <div className="relative z-10 flex flex-col items-center w-full max-w-sm animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+          {/* 🌟 중간 스크롤 영역 (영수증 + 썸네일) - 버튼과 완벽히 분리됨! */}
+          <div className="relative z-10 flex-1 overflow-y-auto w-full max-w-md mx-auto px-4 flex flex-col items-center pb-6 scrollbar-hide" onClick={(e) => e.stopPropagation()}>
 
-              {/* 🌟 썸네일 선택기 */}
-              {shareReview.imageUrls && shareReview.imageUrls.length > 1 && (
-                <div className="flex gap-2 mb-4 w-[300px] overflow-x-auto scrollbar-hide pb-2">
-                  {shareReview.imageUrls.map((url, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => setReceiptImageIndex(idx)}
-                      className={`w-12 h-12 shrink-0 rounded-lg border-2 transition-all cursor-pointer overflow-hidden ${idx === receiptImageIndex ? 'border-orange-500 scale-110 shadow-md' : 'border-transparent opacity-50 hover:opacity-100'}`}
-                    >
-                      <img src={url} crossOrigin="anonymous" className="w-full h-full object-cover" alt={`thumb-${idx}`} />
-                    </button>
-                  ))}
+            {/* 썸네일 선택기 */}
+            {shareReview.imageUrls && shareReview.imageUrls.length > 1 && (
+              <div className="flex gap-2 mb-4 w-[300px] overflow-x-auto scrollbar-hide pb-2 shrink-0">
+                {shareReview.imageUrls.map((url, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setReceiptImageIndex(idx)}
+                    className={`w-12 h-12 shrink-0 rounded-lg border-2 transition-all cursor-pointer overflow-hidden ${idx === receiptImageIndex ? 'border-orange-500 scale-110 shadow-md' : 'border-transparent opacity-50 hover:opacity-100'}`}
+                  >
+                    <img src={url} crossOrigin="anonymous" className="w-full h-full object-cover" alt={`thumb-${idx}`} />
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* 영수증 캡처 영역 */}
+            <div
+              ref={receiptRef}
+              className="bg-white w-[300px] p-6 shadow-2xl relative overflow-hidden shrink-0"
+              style={{ fontFamily: "'Noto Sans KR', sans-serif" }}
+            >
+              <div className="absolute top-0 left-0 right-0 h-2 bg-transparent" style={{ backgroundImage: "linear-gradient(-45deg, transparent 4px, white 4px), linear-gradient(45deg, transparent 4px, white 4px)", backgroundSize: "8px 8px" }} />
+
+              <div className="border-b-2 border-dashed border-stone-300 pb-4 mb-4 text-center mt-2">
+                <h2 className="text-2xl font-black text-stone-800 tracking-tighter uppercase">TODAY FOOD</h2>
+                <p className="text-[10px] text-stone-500 font-medium mt-1">맛있는 기억을 기록하다</p>
+              </div>
+
+              {shareReview.imageUrls && shareReview.imageUrls[receiptImageIndex] && (
+                <div className="mb-4 rounded-xl border border-stone-200 p-1 bg-stone-50">
+                  <img src={shareReview.imageUrls[receiptImageIndex]} crossOrigin="anonymous" className="w-full h-40 object-cover rounded-lg" alt="음식 사진" />
                 </div>
               )}
 
-              {/* 영수증 캡처 영역 */}
-              <div
-                ref={receiptRef}
-                className="bg-white w-[300px] p-6 shadow-2xl relative overflow-hidden"
-                style={{ fontFamily: "'Noto Sans KR', sans-serif" }}
+              <div className="space-y-2 mb-4">
+                <div className="flex justify-between items-end border-b border-stone-100 pb-1">
+                  <span className="text-[11px] text-stone-400 font-bold">STORE</span>
+                  <span className="text-lg font-black text-stone-800 truncate pl-4">{shareReview.storeName}</span>
+                </div>
+                <div className="flex justify-between items-end border-b border-stone-100 pb-1">
+                  <span className="text-[11px] text-stone-400 font-bold">MENU</span>
+                  <span className="text-sm font-bold text-stone-600 truncate pl-4">{shareReview.menu}</span>
+                </div>
+                <div className="flex justify-between items-end pb-1">
+                  <span className="text-[11px] text-stone-400 font-bold">RATING</span>
+                  <span className="text-sm font-bold text-amber-500">{"★".repeat(shareReview.rating)}{"☆".repeat(5 - shareReview.rating)}</span>
+                </div>
+              </div>
+
+              <div className="border-t-2 border-dashed border-stone-300 pt-4 mb-2">
+                <p className="text-sm font-medium text-stone-700 italic text-center break-keep leading-relaxed bg-stone-50 p-3 rounded-xl">
+                  "{shareReview.comment}"
+                </p>
+              </div>
+
+              <div className="flex flex-col items-center justify-center mt-6 mb-2">
+                <div className="p-1.5 bg-white border border-stone-200 rounded-xl shadow-sm mb-2">
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`${window.location.origin}/?uid=${user?.uid}&rid=${shareReview.id}`)}`}
+                    alt="맛집 저장 QR"
+                    crossOrigin="anonymous"
+                    className="w-16 h-16 opacity-90"
+                  />
+                </div>
+                <p className="text-[10px] text-stone-500 font-bold tracking-widest">SCAN TO SAVE</p>
+                <p className="text-[9px] text-stone-400 font-bold tracking-widest uppercase mt-1">today-food.vercel.app</p>
+              </div>
+
+              <div className="absolute bottom-0 left-0 right-0 h-2 bg-transparent rotate-180" style={{ backgroundImage: "linear-gradient(-45deg, transparent 4px, white 4px), linear-gradient(45deg, transparent 4px, white 4px)", backgroundSize: "8px 8px" }} />
+            </div>
+          </div>
+
+          {/* 🌟 하단 고정 버튼 영역 (절대 밀려나지 않음!) */}
+          <div className="relative z-10 w-full max-w-md mx-auto p-4 bg-stone-900/80 backdrop-blur-xl rounded-t-3xl border-t border-white/10 pb-8 sm:pb-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex flex-col gap-2 w-full max-w-[300px] mx-auto">
+              <button
+                onClick={handleKakaoShare}
+                className="w-full bg-[#FEE500] hover:bg-[#FDD800] text-stone-900 font-black py-3.5 rounded-xl shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2"
               >
-                <div className="absolute top-0 left-0 right-0 h-2 bg-transparent" style={{ backgroundImage: "linear-gradient(-45deg, transparent 4px, white 4px), linear-gradient(45deg, transparent 4px, white 4px)", backgroundSize: "8px 8px" }} />
+                <MessageCircle size={18} className="fill-stone-900" />
+                카카오톡으로 공유하기
+              </button>
 
-                <div className="border-b-2 border-dashed border-stone-300 pb-4 mb-4 text-center mt-2">
-                  <h2 className="text-2xl font-black text-stone-800 tracking-tighter uppercase">TODAY FOOD</h2>
-                  <p className="text-[10px] text-stone-500 font-medium mt-1">맛있는 기억을 기록하다</p>
-                </div>
-
-                {shareReview.imageUrls && shareReview.imageUrls[receiptImageIndex] && (
-                  <div className="mb-4 rounded-xl border border-stone-200 p-1 bg-stone-50">
-                    <img src={shareReview.imageUrls[receiptImageIndex]} crossOrigin="anonymous" className="w-full h-40 object-cover rounded-lg" alt="음식 사진" />
-                  </div>
-                )}
-
-                <div className="space-y-2 mb-4">
-                  <div className="flex justify-between items-end border-b border-stone-100 pb-1">
-                    <span className="text-[11px] text-stone-400 font-bold">STORE</span>
-                    <span className="text-lg font-black text-stone-800 truncate pl-4">{shareReview.storeName}</span>
-                  </div>
-                  <div className="flex justify-between items-end border-b border-stone-100 pb-1">
-                    <span className="text-[11px] text-stone-400 font-bold">MENU</span>
-                    <span className="text-sm font-bold text-stone-600 truncate pl-4">{shareReview.menu}</span>
-                  </div>
-                  <div className="flex justify-between items-end pb-1">
-                    <span className="text-[11px] text-stone-400 font-bold">RATING</span>
-                    <span className="text-sm font-bold text-amber-500">{"★".repeat(shareReview.rating)}{"☆".repeat(5 - shareReview.rating)}</span>
-                  </div>
-                </div>
-
-                <div className="border-t-2 border-dashed border-stone-300 pt-4 mb-2">
-                  <p className="text-sm font-medium text-stone-700 italic text-center break-keep leading-relaxed bg-stone-50 p-3 rounded-xl">
-                    "{shareReview.comment}"
-                  </p>
-                </div>
-
-                {/* QR 코드 영역 */}
-                <div className="flex flex-col items-center justify-center mt-6 mb-2">
-                  <div className="p-1.5 bg-white border border-stone-200 rounded-xl shadow-sm mb-2">
-                    <img
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`${window.location.origin}/?uid=${user?.uid}&rid=${shareReview.id}`)}`}
-                      alt="맛집 저장 QR"
-                      crossOrigin="anonymous"
-                      className="w-16 h-16 opacity-90"
-                    />
-                  </div>
-                  <p className="text-[10px] text-stone-500 font-bold tracking-widest">SCAN TO SAVE</p>
-                  <p className="text-[9px] text-stone-400 font-bold tracking-widest uppercase mt-1">today-food.vercel.app</p>
-                </div>
-
-                <div className="absolute bottom-0 left-0 right-0 h-2 bg-transparent rotate-180" style={{ backgroundImage: "linear-gradient(-45deg, transparent 4px, white 4px), linear-gradient(45deg, transparent 4px, white 4px)", backgroundSize: "8px 8px" }} />
-              </div>
-
-              {/* 하단 공유 액션 버튼들 */}
-              <div className="flex flex-col gap-2 w-full max-w-[300px] mt-6 shrink-0">
+              <div className="flex gap-2">
                 <button
-                  onClick={handleKakaoShare}
-                  className="w-full bg-[#FEE500] hover:bg-[#FDD800] text-stone-900 font-black py-3.5 rounded-xl shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                  onClick={handleDownloadReceipt}
+                  disabled={isGeneratingImage}
+                  className="flex-1 bg-white hover:bg-stone-50 text-stone-800 text-sm font-bold py-3.5 rounded-xl shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2"
                 >
-                  <MessageCircle size={18} className="fill-stone-900" />
-                  카카오톡으로 공유하기
+                  {isGeneratingImage ? <Loader2 size={16} className="animate-spin text-orange-500" /> : <Download size={16} className="text-orange-500" />}
+                  이미지 저장
                 </button>
-
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleDownloadReceipt}
-                    disabled={isGeneratingImage}
-                    className="flex-1 bg-white hover:bg-stone-50 text-stone-800 text-sm font-bold py-3.5 rounded-xl shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    {isGeneratingImage ? <Loader2 size={16} className="animate-spin text-orange-500" /> : <Download size={16} className="text-orange-500" />}
-                    이미지 저장
-                  </button>
-                  <button
-                    onClick={handleCopyLink}
-                    className="flex-1 bg-white hover:bg-stone-50 text-stone-800 text-sm font-bold py-3.5 rounded-xl shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    <Copy size={16} className="text-blue-500" />
-                    링크 복사
-                  </button>
-                </div>
+                <button
+                  onClick={handleCopyLink}
+                  className="flex-1 bg-white hover:bg-stone-50 text-stone-800 text-sm font-bold py-3.5 rounded-xl shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Copy size={16} className="text-blue-500" />
+                  링크 복사
+                </button>
               </div>
-
             </div>
           </div>
         </div>
@@ -1719,6 +1720,7 @@ export default function Home() {
                           <p className="text-orange-500 text-sm font-semibold truncate">{review.menu} <span className="text-stone-300 mx-1">|</span> {review.category}</p>
                         </div>
                         <div className="flex gap-1 shrink-0">
+                          {/* 🚨 공유 버튼 클릭 시 영수증 모달 열기! */}
                           <button onClick={() => { setShareReview(review); setReceiptImageIndex(0); }} className="p-2 bg-stone-50 rounded-lg text-stone-400 hover:text-blue-500 cursor-pointer transition-colors" title="공유하기"><Share2 size={14} /></button>
                           <button onClick={() => openEditModal(review)} className="p-2 bg-stone-50 rounded-lg text-stone-400 hover:text-orange-500 cursor-pointer transition-colors" title="수정하기"><Pencil size={14} /></button>
                           <button onClick={() => handleDeleteReview(review.id)} className="p-2 bg-stone-50 rounded-lg text-stone-400 hover:text-red-500 cursor-pointer transition-colors" title="삭제하기"><Trash2 size={14} /></button>
