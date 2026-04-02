@@ -1046,11 +1046,19 @@ export default function Home() {
         </div>
       )}
 
-      {/* 📸 감성 영수증 공유 모달 (업데이트: 스크롤 완벽 지원 및 하단 닫기 버튼) */}
+      {/* 📸 감성 영수증 공유 모달 (업데이트: 스크롤 무관 고정형 X 버튼) */}
       {shareReview && (
         <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/60 backdrop-blur-md" onClick={() => setShareReview(null)}>
-          <div className="min-h-full flex flex-col items-center justify-center p-4 py-12">
 
+          {/* 🌟 핵심 UI 개선: 스크롤과 무관하게 항상 우측 상단에 떠 있는 닫기(X) 버튼 */}
+          <button
+            onClick={() => setShareReview(null)}
+            className="fixed top-5 right-5 sm:top-8 sm:right-8 z-[120] p-2.5 bg-stone-800/60 text-white rounded-full hover:bg-black/80 backdrop-blur-md transition-all cursor-pointer shadow-lg"
+          >
+            <X size={22} strokeWidth={3} />
+          </button>
+
+          <div className="min-h-full flex flex-col items-center justify-center p-4 py-20">
             <div className="relative z-10 flex flex-col items-center w-full max-w-sm animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
 
               {/* 🌟 썸네일 선택기 */}
@@ -1125,7 +1133,7 @@ export default function Home() {
                 <div className="absolute bottom-0 left-0 right-0 h-2 bg-transparent rotate-180" style={{ backgroundImage: "linear-gradient(-45deg, transparent 4px, white 4px), linear-gradient(45deg, transparent 4px, white 4px)", backgroundSize: "8px 8px" }} />
               </div>
 
-              {/* 🌟 수정된 모바일 닫기 버튼 및 공유 액션 버튼들 */}
+              {/* 하단 공유 액션 버튼들 */}
               <div className="flex flex-col gap-2 w-full max-w-[300px] mt-6 shrink-0">
                 <button
                   onClick={handleKakaoShare}
@@ -1152,14 +1160,6 @@ export default function Home() {
                     링크 복사
                   </button>
                 </div>
-
-                {/* 하단 닫기 버튼 추가! */}
-                <button
-                  onClick={() => setShareReview(null)}
-                  className="w-full bg-stone-700 hover:bg-stone-800 text-white text-sm font-bold py-3.5 rounded-xl shadow-md transition-all active:scale-95 cursor-pointer mt-1"
-                >
-                  닫기
-                </button>
               </div>
 
             </div>
