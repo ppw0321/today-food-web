@@ -43,10 +43,6 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
   "기타": ["타코", "브리또", "포케", "샤브샤브", "편의점", "야식", "퀘사디아", "파히타", "편백찜"]
 };
 
-const SYNONYM_GROUPS: string[][] = [
-  ["순대국", "순대국밥"], ["돈까스", "돈가스", "돈카츠", "카츠", "치즈카츠", "치돈"], ["짜장면", "자장면", "짜장", "간짜장"], ["짬뽕", "짬봉", "짬뽕밥"], ["떡볶이", "떡복", "라볶이", "로제떡볶이"], ["마라탕", "마라샹궈", "마라"], ["치킨", "닭", "통닭", "후라이드치킨", "양념치킨", "닭강정"], ["칼국수", "칼국", "국수", "바지락칼국수"], ["삼겹살", "삼겹", "오겹살", "목살"], ["초밥", "스시", "회", "사시미", "연어회", "참치회"], ["냉면", "물냉", "비냉", "물냉면", "비빔냉면", "밀면"], ["햄버거", "버거", "수제버거"], ["쌀국수", "베트남쌀국수", "퍼"], ["파스타", "스파게티", "크림파스타", "토마토파스타"], ["피자", "피짜", "화덕피자"]
-];
-
 const getMenuIconDetails = (menuName: string, category: string) => {
   let emoji = "🍽️";
   if (/(치킨|닭강정|깐풍기|닭갈비|닭발|찜닭|볶음탕)/.test(menuName)) emoji = "🍗";
@@ -90,7 +86,6 @@ const getMenuIconDetails = (menuName: string, category: string) => {
   return { emoji, bgColor: theme.bgColor, textColor: theme.textColor };
 };
 
-// 🌟 (복구) 잘렸던 뱃지 데이터 100% 완전 복구 완료!
 const GENERAL_BADGES = [
   { threshold: 0, icon: "🐣", title: "맛집 뽀시래기", desc: "맛집 탐험의 첫 걸음", color: "text-stone-500", bg: "bg-stone-100 border-stone-200" },
   { threshold: 1, icon: "🥄", title: "첫 숟가락", desc: "역사적인 첫 맛집 기록", color: "text-orange-600", bg: "bg-orange-100 border-orange-200" },
@@ -106,7 +101,6 @@ const GENERAL_BADGES = [
   { threshold: 300, icon: "🐉", title: "전설의 식신", desc: "신화로 남을 전설적인 미식가", color: "text-red-700", bg: "bg-red-100 border-red-400 border-2" },
 ];
 
-// 🌟 (복구) 잘렸던 카테고리 뱃지 데이터 100% 완전 복구 완료!
 const CATEGORY_BADGES: Record<string, any[]> = {
   "한식": [{ threshold: 1, icon: "🍚", title: "국밥 한 그릇", desc: "든든한 K-푸드의 시작" }, { threshold: 5, icon: "🥘", title: "찌개 감별사", desc: "뚝배기 좀 깨본 사람" }, { threshold: 10, icon: "🌶️", title: "K-입맛 마니아", desc: "김치 없인 못 살아 정말 못 살아" }, { threshold: 20, icon: "🧑‍🍳", title: "한식대첩 장인", desc: "동네 백반집 사장님도 인정" }, { threshold: 50, icon: "🏛️", title: "국밥부 장관", desc: "대한민국 한식의 정점" }],
   "중식": [{ threshold: 1, icon: "🥟", title: "단무지 추가요", desc: "기름진 매력에 퐁당" }, { threshold: 5, icon: "🍜", title: "짜장 vs 짬뽕", desc: "인류 최대의 난제 해결사" }, { threshold: 10, icon: "🔥", title: "웍 마스터", desc: "입안에 퍼지는 강렬한 불맛" }, { threshold: 20, icon: "🐉", title: "중원 무림고수", desc: "마라의 한계를 넘어서다" }, { threshold: 50, icon: "👨‍🍳", title: "흑백 요리사", desc: "황금 볶음밥의 창시자" }],
@@ -203,7 +197,7 @@ export default function Home() {
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [activeBadge, setActiveBadge] = useState<{ icon: string, title: string, color: string, bg: string } | null>(null);
 
-  // 🌟 틴더 상태 완벽 관리
+  // 🌟 Phase 2.2 틴더(스와이프) State
   const [tinderState, setTinderState] = useState<'idle' | 'setup' | 'share_room' | 'playing' | 'leaderboard' | 'final_menu'>('idle');
   const [tinderRoomId, setTinderRoomId] = useState<string | null>(null);
   const [tinderMode, setTinderMode] = useState<'menu' | 'restaurant'>('menu');
@@ -260,7 +254,7 @@ export default function Home() {
   const myName = user ? profileNickname : guestId;
   const isHost = roomData?.hostUid === myId;
 
-  // 🌟 (버그수정) 완벽 초기화 킬스위치
+  // 🌟 (버그 수정) 틴더 클린 종료 함수
   const closeTinderFlow = () => {
     setTinderState('idle');
     setTinderRoomId(null);
@@ -274,6 +268,16 @@ export default function Home() {
     setTinderFinalPick(0);
     window.history.replaceState({}, document.title, window.location.pathname);
   };
+
+  // 🌟 (버그 수정) 카카오톡 인앱 브라우저 강제 외부 호출 (로그인 세션 유지용)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const userAgent = navigator.userAgent.toLowerCase();
+      if (userAgent.includes("kakaotalk")) {
+        window.location.href = `kakaotalk://web/openExternal?url=${encodeURIComponent(window.location.href)}`;
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -291,31 +295,32 @@ export default function Home() {
     return () => unsubscribe();
   }, []);
 
+  // 🌟 (버그 수정) 인증 확인이 끝난 뒤에 URL을 체크해서 익명유저/로그인유저 분기 완벽 처리
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const roomParam = params.get("room");
-      const uidParam = params.get("uid");
-      const ridParam = params.get("rid");
+    if (typeof window === "undefined" || authLoading || !myName) return;
 
-      if (roomParam && myName) {
-        joinRoom(roomParam);
-      } else if (uidParam && ridParam) {
-        const fetchSharedReview = async () => {
-          try {
-            const snap = await getDoc(doc(db, "users", uidParam, "reviews", ridParam));
-            if (snap.exists()) {
-              const data = snap.data();
-              setPendingImport({ storeName: data.storeName || "", menu: data.menu || "", category: data.category || "기타", rating: Number(data.rating) || 5, comment: data.comment || "", imageUrls: data.imageUrls || (data.imageUrl ? [data.imageUrl] : []) });
-            } else { alert("존재하지 않거나 삭제된 링크입니다."); }
-          } catch (error) { console.error(error); } finally {
-            window.history.replaceState({}, document.title, window.location.pathname);
-          }
-        };
-        fetchSharedReview();
-      }
+    const params = new URLSearchParams(window.location.search);
+    const roomParam = params.get("room");
+    const uidParam = params.get("uid");
+    const ridParam = params.get("rid");
+
+    if (roomParam) {
+      joinRoom(roomParam);
+    } else if (uidParam && ridParam) {
+      const fetchSharedReview = async () => {
+        try {
+          const snap = await getDoc(doc(db, "users", uidParam, "reviews", ridParam));
+          if (snap.exists()) {
+            const data = snap.data();
+            setPendingImport({ storeName: data.storeName || "", menu: data.menu || "", category: data.category || "기타", rating: Number(data.rating) || 5, comment: data.comment || "", imageUrls: data.imageUrls || (data.imageUrl ? [data.imageUrl] : []) });
+          } else { alert("존재하지 않거나 삭제된 링크입니다."); }
+        } catch (error) { console.error(error); } finally {
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      };
+      fetchSharedReview();
     }
-  }, [myName]);
+  }, [authLoading, myName]); // myName과 authLoading에 의존성 부여
 
   const joinRoom = async (roomId: string) => {
     try {
@@ -337,6 +342,7 @@ export default function Home() {
     } catch (e) { console.error(e); }
   };
 
+  // 🌟 (버그 수정) 상태 전이(라우팅)의 허점을 막은 코드
   useEffect(() => {
     if (!tinderRoomId) return;
     const unsub = onSnapshot(doc(db, "rooms", tinderRoomId), (docSnap) => {
@@ -345,11 +351,12 @@ export default function Home() {
         setRoomData(data);
 
         setTinderState((prevState) => {
-          if (data.status === 'waiting' && prevState === 'setup') return 'share_room';
-          if (data.status === 'playing' && (prevState === 'setup' || prevState === 'share_room')) {
+          // 링크로 처음 들어온 경우(idle)도 대기방(share_room)으로 열리게 허용!
+          if (data.status === 'waiting' && (prevState === 'setup' || prevState === 'idle')) return 'share_room';
+          if (data.status === 'playing' && (prevState === 'setup' || prevState === 'share_room' || prevState === 'idle')) {
             return hasVoted ? 'leaderboard' : 'playing';
           }
-          if (data.status === 'closed' && (prevState === 'setup' || prevState === 'share_room' || prevState === 'playing')) {
+          if (data.status === 'closed' && (prevState === 'setup' || prevState === 'share_room' || prevState === 'playing' || prevState === 'idle')) {
             return 'leaderboard';
           }
           return prevState;
@@ -434,11 +441,6 @@ export default function Home() {
     return () => unsubs.forEach(fn => fn());
   }, [user, showGroupRecords, partnerUids, filterCategory, profileNickname, profilePhotoUrl, partnersData]);
 
-  useEffect(() => {
-    const script = document.createElement("script"); script.src = "https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js"; script.async = true;
-    document.head.appendChild(script); return () => { if (document.head.contains(script)) document.head.removeChild(script); };
-  }, []);
-
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault(); if (!user) return; setIsSavingProfile(true);
     try {
@@ -508,7 +510,7 @@ export default function Home() {
   const searchLocationBasedPlaces = async (menu: string, lat: number, lng: number, sort: string) => {
     setIsLocating(true);
     try {
-      const KAKAO_KEY = "deb0556cf6ab2cc0e38a558fd65ae01b"; // 🚨 REST API 키 입력
+      const KAKAO_KEY = "deb0556cf6ab2cc0e38a558fd65ae01b"; // 🚨 REST API 키 필수!!
       const res = await fetch(`https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(menu)}&y=${lat}&x=${lng}&radius=3000&size=15&sort=${sort}`, {
         headers: { Authorization: `KakaoAK ${KAKAO_KEY}` }
       });
@@ -662,7 +664,6 @@ export default function Home() {
   const handleGoogleLogin = async () => { try { await signInWithPopup(auth, googleProvider); } catch (e) { } };
   const handleLogout = async () => { await signOut(auth); };
 
-  // 🌟 [버그 수정] 틴더 생성 시 인덱스와 데이터를 완전하게 0으로 포맷팅
   const handleCreateRoom = async (mode: 'menu' | 'restaurant') => {
     setTinderMode(mode);
     const newRoomId = generateRandomString();
@@ -776,7 +777,6 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#FFFDF6] text-stone-800 font-sans pb-20 relative">
-
       <header className="fixed top-0 left-0 right-0 bg-white z-[100] border-b border-orange-100 shadow-md">
         <div className="max-w-md mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -787,7 +787,7 @@ export default function Home() {
             <div className="shrink-0 pl-2">
               {user ? (
                 <div className="flex items-center gap-2.5">
-                  <button onClick={() => setIsSyncModalOpen(true)} className="p-2 rounded-full bg-stone-50 text-stone-400 hover:bg-stone-100 cursor-pointer transition-colors"><Users size={18} /></button>
+                  <button onClick={() => setIsSyncModalOpen(true)} className={`p-2 rounded-full transition-colors ${partnerUids.length > 0 ? 'bg-blue-50 text-blue-500 hover:bg-blue-100' : 'bg-stone-50 text-stone-400 hover:bg-stone-100'} cursor-pointer`}><Users size={18} /></button>
                   <button onClick={() => setIsProfileModalOpen(true)} className="flex items-center gap-1.5 bg-stone-50 hover:bg-stone-100 pl-1.5 pr-3 py-1.5 rounded-full transition-colors cursor-pointer">
                     {profilePhotoUrl ? <img src={profilePhotoUrl} className="w-6 h-6 rounded-full object-cover border border-stone-200" /> : <div className="w-6 h-6 rounded-full bg-stone-200 flex items-center justify-center text-stone-500"><User size={12} /></div>}
                     <span className="text-[11px] font-bold text-stone-600 truncate max-w-[60px]">{profileNickname}</span>
@@ -802,7 +802,6 @@ export default function Home() {
       </header>
 
       <div className="max-w-md mx-auto px-6 pt-24 pb-20 space-y-8 relative z-10">
-
         {user && !authLoading && (
           <div onClick={openBadgeModal} className="bg-white rounded-3xl p-5 shadow-sm border border-orange-100 flex items-center justify-between cursor-pointer relative z-20">
             <div className="flex items-center gap-4">
@@ -980,31 +979,25 @@ export default function Home() {
           </section>
         )}
 
-        {user && (
-          <section className="bg-white rounded-3xl p-6 shadow-sm border border-orange-50 space-y-5 z-20 relative">
-            <div className="flex items-center gap-2 mb-2"><Star className="text-orange-500 fill-orange-500" size={18} /><h2 className="font-bold text-stone-800">맛집 직접 기록</h2></div>
-            <input type="text" value={storeName} onChange={(e) => setStoreName(e.target.value)} placeholder="가게 이름" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 outline-none text-sm focus:ring-2 focus:ring-orange-500" />
-            <div className="grid grid-cols-2 gap-3">
-              <input type="text" value={menu} onChange={(e) => setMenu(e.target.value)} placeholder="메뉴" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 outline-none text-sm focus:ring-2 focus:ring-orange-500" />
-              <div className="flex items-center justify-center bg-stone-50 border border-stone-100 rounded-xl gap-1">
-                {[1, 2, 3, 4, 5].map(s => <Star key={s} size={18} onClick={() => setRating(s)} className={`cursor-pointer ${rating >= s ? 'text-amber-400 fill-amber-400' : 'text-stone-300'}`} />)}
-              </div>
+        <section className="bg-white rounded-3xl p-6 shadow-sm border border-orange-50 space-y-5 z-20 relative">
+          <div className="flex items-center gap-2 mb-2"><Star className="text-orange-500 fill-orange-500" size={18} /><h2 className="font-bold text-stone-800">맛집 직접 기록</h2></div>
+          <input type="text" value={storeName} onChange={(e) => setStoreName(e.target.value)} placeholder="가게 이름" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 outline-none text-sm focus:ring-2 focus:ring-orange-500" />
+          <div className="grid grid-cols-2 gap-3">
+            <input type="text" value={menu} onChange={(e) => setMenu(e.target.value)} placeholder="메뉴" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 outline-none text-sm focus:ring-2 focus:ring-orange-500" />
+            <div className="flex items-center justify-center bg-stone-50 border border-stone-100 rounded-xl gap-1">
+              {[1, 2, 3, 4, 5].map(s => <Star key={s} size={18} onClick={() => setRating(s)} className={`cursor-pointer ${rating >= s ? 'text-amber-400 fill-amber-400' : 'text-stone-300'}`} />)}
             </div>
-            <CategorySelector value={category} onChange={setCategory} showCustom={showCustomCategory} onToggleCustom={() => setShowCustomCategory(!showCustomCategory)} customValue={customCategory} onCustomChange={setCustomCategory} availableCats={knownCategories} />
-            <MultiImagePicker existingUrls={[]} newPreviews={imagePreviews} onSelect={(e: any, t: number) => handleImagesSelect(e, t, setImageFiles, setImagePreviews)} onRemoveExisting={() => { }} onRemoveNew={(idx: number) => { setImageFiles(p => p.filter((_, i) => i !== idx)); setImagePreviews(p => p.filter((_, i) => i !== idx)); }} />
-            <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="한줄평" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 h-24 resize-none outline-none text-sm focus:ring-2 focus:ring-orange-500" />
-            <button onClick={handleAddReview} disabled={isSubmitting} className="w-full bg-orange-500 text-white font-bold py-4 rounded-xl shadow-lg">{isSubmitting ? "저장 중..." : "기록 저장하기"}</button>
-          </section>
-        )}
+          </div>
+          <CategorySelector value={category} onChange={setCategory} showCustom={showCustomCategory} onToggleCustom={() => setShowCustomCategory(!showCustomCategory)} customValue={customCategory} onCustomChange={setCustomCategory} availableCats={knownCategories} />
+          <MultiImagePicker existingUrls={[]} newPreviews={imagePreviews} onSelect={(e: any, t: number) => handleImagesSelect(e, t, setImageFiles, setImagePreviews)} onRemoveExisting={() => { }} onRemoveNew={(idx: number) => { setImageFiles(p => p.filter((_, i) => i !== idx)); setImagePreviews(p => p.filter((_, i) => i !== idx)); }} />
+          <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="한줄평" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 h-24 resize-none outline-none text-sm focus:ring-2 focus:ring-orange-500" />
+          <button onClick={handleAddReview} disabled={isSubmitting} className="w-full bg-orange-500 text-white font-bold py-4 rounded-xl shadow-lg">{isSubmitting ? "저장 중..." : "기록 저장하기"}</button>
+        </section>
       </div>
 
-      {/* ========================================================================= */}
-      {/* 🌟 단일 모달 트리 (z-[200] 이상 배치로 절대 클릭 안 먹히는 버그 방지) */}
-      {/* ========================================================================= */}
-
-      {/* 1. 틴더 관련 모달창 */}
+      {/* 🌟 틴더 기능 영역 */}
       {tinderState !== 'idle' && (
-        <div className="fixed inset-0 z-[250] flex items-center justify-center bg-stone-900/95 backdrop-blur-md overflow-hidden p-4">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-stone-900/95 backdrop-blur-md overflow-hidden p-4">
 
           {tinderState === 'setup' && (
             <div className="bg-white rounded-[2rem] p-6 shadow-2xl relative w-full max-w-sm flex flex-col overflow-hidden animate-in zoom-in-95">
@@ -1069,7 +1062,6 @@ export default function Home() {
 
               <div className="shrink-0">
                 {isHost ? (
-                  /* 🌟 혼자일 경우 비활성화 되며 명확한 안내 문구 표시 */
                   (roomData.participants?.length || 0) >= 2 ? (
                     <button
                       onClick={() => updateDoc(doc(db, "rooms", tinderRoomId!), { status: 'playing' })}
@@ -1160,7 +1152,7 @@ export default function Home() {
               <div className="shrink-0 mt-2 border-b border-stone-100 pb-4 mb-4">
                 <h2 className="text-xl font-black text-stone-800 flex items-center gap-2"><Activity size={20} className="text-rose-500" /> 실시간 투표 현황</h2>
                 <p className="text-[10px] text-stone-400 mt-1">
-                  {roomData?.status === 'closed' ? "최종 1위를 직접 클릭 후 맛집을 찾으세요!" : "친구들의 투표를 실시간으로 확인하세요."}
+                  {roomData?.status === 'closed' ? "최종 1위를 직접 클릭 후 선택하세요!" : "친구들의 투표를 실시간으로 확인하세요."}
                 </p>
               </div>
 
@@ -1224,7 +1216,7 @@ export default function Home() {
                       }}
                       className="w-full bg-stone-900 hover:bg-black text-white font-black py-3.5 rounded-xl shadow-lg active:scale-95 transition-transform text-sm cursor-pointer"
                     >
-                      {tinderMode === 'menu' ? '📍 선택된 메뉴로 맛집 찾기' : '🏆 선택된 식당 영수증 띄우기'}
+                      {tinderMode === 'menu' ? '📍 선택한 메뉴로 맛집 찾기' : '🏆 선택한 식당 영수증 띄우기'}
                     </button>
                   ) : <button onClick={closeTinderFlow} className="w-full bg-stone-100 text-stone-600 font-bold py-3.5 rounded-xl text-sm transition-colors hover:bg-stone-200 cursor-pointer">닫기 (결과 없음)</button>
                 ) : (
@@ -1287,12 +1279,11 @@ export default function Home() {
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* 4. 기타 보조 모달 창들 (프로필, 친구, 영수증, 리뷰) - z-250 */}
-      {/* ========================================================================= */}
-
+      {/* ============================================================== */}
+      {/* 🌟 그 외 보조 모달 창들 (프로필, 친구, 영수증, 리뷰) z-210 고정 */}
+      {/* ============================================================== */}
       {isProfileModalOpen && (
-        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[210] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsProfileModalOpen(false)} />
           <div className="relative bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in-95">
             <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-black flex items-center gap-2"><Settings className="text-orange-500" /> 내 프로필 설정</h3><button onClick={() => setIsProfileModalOpen(false)} className="p-1.5 rounded-full bg-stone-100 text-stone-500 cursor-pointer"><X size={18} /></button></div>
@@ -1315,7 +1306,7 @@ export default function Home() {
       )}
 
       {isSyncModalOpen && (
-        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[210] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsSyncModalOpen(false)} />
           <div className="relative bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 max-h-[90vh] flex flex-col">
             <div className="flex justify-between items-center mb-4 shrink-0"><h3 className="text-xl font-black flex items-center gap-2"><MapPin className="text-blue-500" fill="#E0F2FE" /> 공유 지도 만들기</h3><button onClick={() => setIsSyncModalOpen(false)} className="p-1.5 rounded-full bg-stone-100 text-stone-500 cursor-pointer"><X size={18} /></button></div>
@@ -1354,65 +1345,8 @@ export default function Home() {
         </div>
       )}
 
-      {isBadgeModalOpen && (
-        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4" onClick={() => setIsBadgeModalOpen(false)}>
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-          <div className="relative bg-white w-full max-w-sm rounded-3xl p-5 shadow-2xl max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4 shrink-0"><h3 className="text-xl font-black flex items-center gap-2"><Star className="text-orange-500 fill-orange-500" size={20} /> 내 뱃지 도감</h3><button onClick={() => setIsBadgeModalOpen(false)} className="p-1.5 rounded-full bg-stone-100 cursor-pointer"><X size={18} /></button></div>
-            {isLoadingBadges ? <div className="py-20 flex justify-center"><Loader2 className="animate-spin text-orange-500" size={32} /></div> : (
-              <>
-                <div className="bg-orange-50 border border-orange-100 rounded-2xl p-4 mb-3 flex items-center justify-between shrink-0">
-                  <div><p className="text-xs font-bold text-orange-600 mb-0.5">나의 수집 진행도</p><p className="text-sm font-black text-stone-800"><span className="text-orange-500 text-xl">{totalCollectedBadges}</span> / {totalBadgesCount}개</p></div>
-                  <div className="text-right"><p className="text-[11px] text-stone-500 font-medium">Locked</p><p className="text-sm font-bold text-stone-700">🔒 {lockedBadgesCount}개</p></div>
-                </div>
-                <div className="flex border-b border-stone-100 mb-4 shrink-0">
-                  <button onClick={() => setBadgeTab("general")} className={`flex-1 pb-2 font-bold text-sm border-b-2 ${badgeTab === "general" ? "border-orange-500 text-orange-500" : "border-transparent text-stone-400"} cursor-pointer`}>🏆 미식가 등급</button>
-                  <button onClick={() => setBadgeTab("category")} className={`flex-1 pb-2 font-bold text-sm border-b-2 ${badgeTab === "category" ? "border-orange-500 text-orange-500" : "border-transparent text-stone-400"} cursor-pointer`}>🏷️ 카테고리 뱃지</button>
-                </div>
-                <div className="overflow-y-auto scrollbar-hide flex-1 pb-4 space-y-3">
-                  {badgeTab === "general" ? GENERAL_BADGES.map((b, i) => {
-                    const isUnlocked = badgeStats.total >= b.threshold;
-                    const isSelected = displayBadge.title === b.title;
-                    return (
-                      <div key={i} onClick={() => isUnlocked && handleSelectBadge(b, 'general')} className={`flex items-center gap-4 p-3 rounded-2xl border ${isUnlocked ? (isSelected ? 'border-orange-500 bg-orange-50 ring-2 ring-orange-200' : `${b.bg} cursor-pointer`) : 'bg-stone-50 border-stone-100 grayscale opacity-40'}`}>
-                        <div className="text-3xl shrink-0 w-12 text-center">{isUnlocked ? b.icon : "🔒"}</div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex justify-between items-center mb-0.5"><span className={`font-black text-sm ${isUnlocked ? b.color : 'text-stone-500'}`}>{b.title}</span>{isUnlocked && isSelected && <Check size={16} className="text-orange-500" />}</div>
-                          <p className="text-[11px] text-stone-500 truncate">{b.desc}</p>
-                          <p className="text-[10px] font-bold text-stone-400 mt-1 bg-stone-100 inline-block px-1.5 py-0.5 rounded">목표: 총 {b.threshold}곳 저장</p>
-                        </div>
-                      </div>
-                    );
-                  }) : Object.entries(CATEGORY_BADGES).map(([cat, badges]) => (
-                    <div key={cat}>
-                      <h4 className="font-extrabold text-stone-700 mb-3 flex justify-between border-b border-stone-100 pb-2"><span>{cat} 영역</span><span className="text-xs bg-stone-100 text-stone-500 px-2 py-1 rounded-lg">누적 {badgeStats.categories[cat] || 0}곳</span></h4>
-                      <div className="grid gap-2">
-                        {badges.map((b: any) => {
-                          const isUnlocked = (badgeStats.categories[cat] || 0) >= b.threshold;
-                          const isSelected = displayBadge.title === b.title;
-                          return (
-                            <div key={b.title} onClick={() => isUnlocked && handleSelectBadge(b, 'category')} className={`flex items-center gap-3 p-3 rounded-2xl border ${isUnlocked ? (isSelected ? 'border-orange-500 bg-orange-50 ring-2 ring-orange-200' : 'bg-white border-orange-100 cursor-pointer') : 'bg-stone-50 border-stone-100 grayscale opacity-40'}`}>
-                              <div className="text-2xl shrink-0 w-10 text-center">{isUnlocked ? b.icon : "🔒"}</div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex justify-between items-center mb-0.5"><span className="font-bold text-sm text-stone-800">{b.title}</span>{isUnlocked && isSelected && <Check size={16} className="text-orange-500" />}</div>
-                                <p className="text-[11px] text-stone-500 truncate">{b.desc}</p>
-                                <p className="text-[10px] font-bold text-stone-400 mt-1 bg-stone-100 inline-block px-1.5 py-0.5 rounded">목표: {cat} {b.threshold}곳 저장</p>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
       {isAuthModalOpen && (
-        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[210] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
           <div className="relative bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in-95">
             <div className="flex justify-end mb-2"><button onClick={() => { setIsAuthModalOpen(false); setAuthError(""); setResetMessage(""); }} className="p-1.5 rounded-full bg-stone-100 cursor-pointer"><X size={18} /></button></div>
@@ -1536,7 +1470,7 @@ export default function Home() {
                 <input type="text" value={editMenu} onChange={(e) => setEditMenu(e.target.value)} required className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 text-sm" />
                 <div className="flex items-center justify-between bg-stone-50 border border-stone-100 rounded-xl px-3 h-[50px]">{[1, 2, 3, 4, 5].map((s) => <Star key={s} onClick={() => setEditRating(s)} size={22} className={`cursor-pointer ${editRating >= s ? 'text-amber-400 fill-amber-400' : 'text-stone-300'}`} />)}</div>
               </div>
-              <CategorySelector value={editCategory} onChange={setEditCategory} showCustom={editShowCustomCategory} onToggleCustom={() => setEditShowCustomCategory(!editShowCustomCategory)} customValue={editCustomCategory} onCustomChange={setCustomCategory} availableCats={knownCategories} />
+              <CategorySelector value={editCategory} onChange={setCategory} showCustom={editShowCustomCategory} onToggleCustom={() => setEditShowCustomCategory(!editShowCustomCategory)} customValue={editCustomCategory} onCustomChange={setCustomCategory} availableCats={knownCategories} />
               <MultiImagePicker existingUrls={editExistingUrls} newPreviews={editImagePreviews} onSelect={(e: any, t: number) => handleImagesSelect(e, t, setEditImageFiles, setEditImagePreviews)} onRemoveExisting={(idx: number) => setEditExistingUrls(p => p.filter((_, i) => i !== idx))} onRemoveNew={(idx: number) => { setEditImageFiles(p => p.filter((_, i) => i !== idx)); setEditImagePreviews(p => p.filter((_, i) => i !== idx)); }} />
               <textarea value={editComment} onChange={(e) => setEditComment(e.target.value)} required className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 h-24 resize-none text-sm" />
               <button type="submit" disabled={isUpdating} className="w-full bg-orange-500 text-white font-bold py-3.5 rounded-xl cursor-pointer">{isUpdating ? "저장 중..." : "수정 완료"}</button>
