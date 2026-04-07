@@ -74,10 +74,7 @@ const getMenuIconDetails = (menuName: string, category: string) => {
   else if (/(초밥|스시|사시미|회)/.test(menuName)) emoji = "🍣";
   else if (/(빵|디저트|케이크|마카롱)/.test(menuName)) emoji = "🍰";
   else if (/(커피|라떼|스무디)/.test(menuName)) emoji = "☕";
-  else {
-    const fallbackEmojis: Record<string, string> = { "한식": "🍚", "중식": "🥟", "일식": "🍱", "양식": "🍽️", "분식": "🥘", "카페": "🥤", "동남아": "🍜", "기타": "🍽️" };
-    emoji = fallbackEmojis[category] || "🍽️";
-  }
+
   const catThemes: Record<string, { bgColor: string, textColor: string }> = {
     "한식": { bgColor: "bg-[#F0F4F8]", textColor: "text-[#3B82F6]" },
     "중식": { bgColor: "bg-[#FEF2F2]", textColor: "text-[#EF4444]" },
@@ -93,6 +90,7 @@ const getMenuIconDetails = (menuName: string, category: string) => {
   return { emoji, bgColor: theme.bgColor, textColor: theme.textColor };
 };
 
+// 🌟 (복구) 잘렸던 뱃지 데이터 100% 완전 복구 완료!
 const GENERAL_BADGES = [
   { threshold: 0, icon: "🐣", title: "맛집 뽀시래기", desc: "맛집 탐험의 첫 걸음", color: "text-stone-500", bg: "bg-stone-100 border-stone-200" },
   { threshold: 1, icon: "🥄", title: "첫 숟가락", desc: "역사적인 첫 맛집 기록", color: "text-orange-600", bg: "bg-orange-100 border-orange-200" },
@@ -108,6 +106,7 @@ const GENERAL_BADGES = [
   { threshold: 300, icon: "🐉", title: "전설의 식신", desc: "신화로 남을 전설적인 미식가", color: "text-red-700", bg: "bg-red-100 border-red-400 border-2" },
 ];
 
+// 🌟 (복구) 잘렸던 카테고리 뱃지 데이터 100% 완전 복구 완료!
 const CATEGORY_BADGES: Record<string, any[]> = {
   "한식": [{ threshold: 1, icon: "🍚", title: "국밥 한 그릇", desc: "든든한 K-푸드의 시작" }, { threshold: 5, icon: "🥘", title: "찌개 감별사", desc: "뚝배기 좀 깨본 사람" }, { threshold: 10, icon: "🌶️", title: "K-입맛 마니아", desc: "김치 없인 못 살아 정말 못 살아" }, { threshold: 20, icon: "🧑‍🍳", title: "한식대첩 장인", desc: "동네 백반집 사장님도 인정" }, { threshold: 50, icon: "🏛️", title: "국밥부 장관", desc: "대한민국 한식의 정점" }],
   "중식": [{ threshold: 1, icon: "🥟", title: "단무지 추가요", desc: "기름진 매력에 퐁당" }, { threshold: 5, icon: "🍜", title: "짜장 vs 짬뽕", desc: "인류 최대의 난제 해결사" }, { threshold: 10, icon: "🔥", title: "웍 마스터", desc: "입안에 퍼지는 강렬한 불맛" }, { threshold: 20, icon: "🐉", title: "중원 무림고수", desc: "마라의 한계를 넘어서다" }, { threshold: 50, icon: "👨‍🍳", title: "흑백 요리사", desc: "황금 볶음밥의 창시자" }],
@@ -124,17 +123,7 @@ const getCurrentBadge = (count: number) => {
 };
 
 interface Review {
-  id: string;
-  storeName: string;
-  menu: string;
-  rating: number;
-  comment: string;
-  category: string;
-  imageUrls?: string[];
-  userId?: string;
-  userPhoto?: string;
-  userName?: string;
-  createdAt?: any;
+  id: string; storeName: string; menu: string; rating: number; comment: string; category: string; imageUrls?: string[]; userId?: string; userPhoto?: string; userName?: string; createdAt?: any;
 }
 
 export default function Home() {
@@ -200,9 +189,9 @@ export default function Home() {
   const [editExistingUrls, setEditExistingUrls] = useState<string[]>([]);
   const [editImageFiles, setEditImageFiles] = useState<File[]>([]);
   const [editImagePreviews, setEditImagePreviews] = useState<string[]>([]);
-
   const [isUpdating, setIsUpdating] = useState(false);
   const [filterCategory, setFilterCategory] = useState("전체");
+
   const [fullScreenData, setFullScreenData] = useState<{ urls: string[], currentIndex: number } | null>(null);
   const [isBadgeModalOpen, setIsBadgeModalOpen] = useState(false);
   const [badgeTab, setBadgeTab] = useState<"general" | "category">("general");
@@ -214,6 +203,7 @@ export default function Home() {
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [activeBadge, setActiveBadge] = useState<{ icon: string, title: string, color: string, bg: string } | null>(null);
 
+  // 🌟 틴더 상태 완벽 관리
   const [tinderState, setTinderState] = useState<'idle' | 'setup' | 'share_room' | 'playing' | 'leaderboard' | 'final_menu'>('idle');
   const [tinderRoomId, setTinderRoomId] = useState<string | null>(null);
   const [tinderMode, setTinderMode] = useState<'menu' | 'restaurant'>('menu');
@@ -221,20 +211,18 @@ export default function Home() {
   const [currentTinderIndex, setCurrentTinderIndex] = useState(0);
   const [likedTinderItems, setLikedTinderItems] = useState<any[]>([]);
   const [roomLeaderboard, setRoomLeaderboard] = useState<any[]>([]);
+  const [roomData, setRoomData] = useState<any>(null);
   const [hasVoted, setHasVoted] = useState(false);
   const [guestId, setGuestId] = useState("");
   const [tinderFinalPick, setTinderFinalPick] = useState<number>(0);
-
   const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null);
   const [touchStartX, setTouchStartX] = useState(0);
   const [touchCurrentX, setTouchCurrentX] = useState(0);
 
-  // 🌟 (수정) 변수들의 위치를 안전하게 상단으로 이동 및 타입스크립트 에러 방지
   const myReviewsCount = reviews.filter((r: Review) => r.userId === user?.uid).length;
   const displayBadge = activeBadge || getCurrentBadge(myReviewsCount);
 
   const filterOptions = useMemo(() => ["전체", ...knownCategories], [knownCategories]);
-
   const filteredReviews = useMemo(() => {
     return reviews.filter((r: Review) => {
       if (!showGroupRecords && r.userId !== user?.uid) return false;
@@ -268,8 +256,25 @@ export default function Home() {
   const lockedBadgesCount = totalBadgesCount - totalCollectedBadges;
 
   const generateRandomString = (length = 6) => Math.random().toString(36).substring(2, 2 + length).toUpperCase();
+  const myId = user ? user.uid : guestId;
+  const myName = user ? profileNickname : guestId;
+  const isHost = roomData?.hostUid === myId;
 
-  // useEffect 영역
+  // 🌟 (버그수정) 완벽 초기화 킬스위치
+  const closeTinderFlow = () => {
+    setTinderState('idle');
+    setTinderRoomId(null);
+    setRoomData(null);
+    setHasVoted(false);
+    setCurrentTinderIndex(0);
+    setLikedTinderItems([]);
+    setRoomLeaderboard([]);
+    setSwipeDirection(null);
+    setTouchCurrentX(0);
+    setTinderFinalPick(0);
+    window.history.replaceState({}, document.title, window.location.pathname);
+  };
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       let gId = localStorage.getItem("tf_guest_id");
@@ -279,171 +284,26 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u); setAuthLoading(false);
+      if (u) { setIsAuthModalOpen(false); setAuthMode("login"); setAuthEmail(""); setAuthPassword(""); }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const roomParam = params.get("room");
-      if (roomParam) {
+      const uidParam = params.get("uid");
+      const ridParam = params.get("rid");
+
+      if (roomParam && myName) {
         joinRoom(roomParam);
-      }
-    }
-  }, []);
-
-  const joinRoom = async (roomId: string) => {
-    try {
-      const roomDoc = await getDoc(doc(db, "rooms", roomId));
-      if (roomDoc.exists()) {
-        const rData = roomDoc.data();
-        setTinderRoomId(roomId);
-        setTinderMode(rData.mode);
-        setTinderItems(rData.items || []);
-        setCurrentTinderIndex(0);
-        setLikedTinderItems([]);
-        setHasVoted(false);
-        setTinderState('playing');
-        window.history.replaceState({}, document.title, window.location.pathname);
-      } else {
-        alert("존재하지 않거나 만료된 투표방입니다.");
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
-    } catch (e) { console.error(e); }
-  };
-
-  useEffect(() => {
-    if (!tinderRoomId || tinderState !== 'leaderboard') return;
-
-    const votesRef = collection(db, "rooms", tinderRoomId, "votes");
-    const unsub = onSnapshot(votesRef, (snap) => {
-      const voteCounts: Record<string, number> = {};
-      snap.forEach(doc => {
-        const data = doc.data();
-        const userLikes = data.likes || [];
-        userLikes.forEach((itemName: string) => {
-          voteCounts[itemName] = (voteCounts[itemName] || 0) + 1;
-        });
-      });
-
-      const sortedLeaderboard = Object.entries(voteCounts)
-        .map(([name, count]) => {
-          const originalItem = tinderItems.find(i => (i.type === 'menu' ? i.name : i.data.id) === name);
-          return { name, count, item: originalItem };
-        })
-        .filter(item => item.item !== undefined)
-        .sort((a, b) => b.count - a.count);
-
-      setRoomLeaderboard(sortedLeaderboard);
-    });
-
-    return () => unsub();
-  }, [tinderRoomId, tinderState, tinderItems]);
-
-  useEffect(() => {
-    if (!user) { setActiveBadge(null); setPartnerUids([]); setProfileNickname(""); setProfilePhotoUrl(""); return; }
-    const userDocRef = doc(db, "users", user.uid);
-    const unsub = onSnapshot(userDocRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        if (data.selectedBadge) setActiveBadge(data.selectedBadge);
-        if (data.partnerUids) setPartnerUids(data.partnerUids);
-
-        if (data.nickname === undefined) {
-          setDoc(userDocRef, { nickname: user.displayName || "나", photoUrl: user.photoURL || "" }, { merge: true });
-        }
-        setProfileNickname(data.nickname || user.displayName || "나");
-        setProfilePhotoUrl(data.photoUrl || user.photoURL || "");
-      } else {
-        setDoc(userDocRef, { nickname: user.displayName || "나", photoUrl: user.photoURL || "", partnerUids: [] }, { merge: true });
-      }
-    });
-    return () => unsub();
-  }, [user]);
-
-  useEffect(() => {
-    if (partnerUids.length === 0) { setPartnersData({}); return; }
-    const unsubs = partnerUids.map(uid =>
-      onSnapshot(doc(db, "users", uid), (snap) => {
-        if (snap.exists()) {
-          setPartnersData(prev => ({ ...prev, [uid]: { ...snap.data(), uid } }));
-        }
-      })
-    );
-    return () => unsubs.forEach(unsub => unsub());
-  }, [partnerUids]);
-
-  useEffect(() => {
-    if (!user) { setReviews([]); setTotalCount(0); return; }
-    const targetUids = showGroupRecords ? [user.uid, ...partnerUids] : [user.uid];
-    const unsubs: any[] = [];
-    const allFetchedReviews: Review[] = [];
-
-    targetUids.forEach(uid => {
-      const reviewsRef = collection(db, "users", uid, "reviews");
-      let q = query(reviewsRef, orderBy("createdAt", "desc"), limit(30));
-      if (filterCategory !== "전체") {
-        q = query(reviewsRef, where("category", "==", filterCategory), orderBy("createdAt", "desc"), limit(30));
-      }
-
-      const unsub = onSnapshot(q, (snap) => {
-        let uPhoto = "";
-        let uName = "친구";
-
-        if (uid === user.uid) {
-          uPhoto = profilePhotoUrl;
-          uName = profileNickname;
-        } else if (partnersData[uid]) {
-          uPhoto = partnersData[uid].photoUrl || "";
-          uName = partnersData[uid].nickname || "친구";
-        }
-
-        const userReviews = snap.docs.map(d => ({
-          id: d.id, ...d.data() as any, userId: uid, userPhoto: uPhoto, userName: uName
-        }));
-
-        const otherUsersReviews = allFetchedReviews.filter((r: Review) => r.userId !== uid);
-        allFetchedReviews.length = 0;
-        allFetchedReviews.push(...otherUsersReviews, ...userReviews);
-        allFetchedReviews.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-
-        setReviews([...allFetchedReviews]);
-        setTotalCount(allFetchedReviews.length);
-
-        setKnownCategories(prev => {
-          const newCats = allFetchedReviews.map((r: Review) => r.category).filter((c: string) => !prev.includes(c));
-          if (newCats.length > 0) return [...prev, ...newCats];
-          return prev;
-        });
-      });
-      unsubs.push(unsub);
-    });
-
-    return () => unsubs.forEach(fn => fn());
-  }, [user, showGroupRecords, partnerUids, filterCategory, profileNickname, profilePhotoUrl, partnersData]);
-
-  useEffect(() => {
-    const script = document.createElement("script");
-    script.src = "https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js";
-    script.async = true;
-    document.head.appendChild(script);
-    return () => { if (document.head.contains(script)) document.head.removeChild(script); };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const userAgent = navigator.userAgent.toLowerCase();
-      if (userAgent.indexOf("kakaotalk") > -1) {
-        window.location.href = "kakaotalk://web/openExternal?url=" + encodeURIComponent(window.location.href);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const uid = params.get("uid");
-      const rid = params.get("rid");
-      if (uid && rid) {
+      } else if (uidParam && ridParam) {
         const fetchSharedReview = async () => {
           try {
-            const snap = await getDoc(doc(db, "users", uid, "reviews", rid));
+            const snap = await getDoc(doc(db, "users", uidParam, "reviews", ridParam));
             if (snap.exists()) {
               const data = snap.data();
               setPendingImport({ storeName: data.storeName || "", menu: data.menu || "", category: data.category || "기타", rating: Number(data.rating) || 5, comment: data.comment || "", imageUrls: data.imageUrls || (data.imageUrl ? [data.imageUrl] : []) });
@@ -455,52 +315,146 @@ export default function Home() {
         fetchSharedReview();
       }
     }
-  }, []);
+  }, [myName]);
+
+  const joinRoom = async (roomId: string) => {
+    try {
+      const roomRef = doc(db, "rooms", roomId);
+      const roomDoc = await getDoc(roomRef);
+      if (roomDoc.exists()) {
+        const rData = roomDoc.data();
+        if (rData.status !== 'closed') {
+          await updateDoc(roomRef, { participants: arrayUnion(myName) });
+        }
+        setTinderRoomId(roomId); setTinderMode(rData.mode); setTinderItems(rData.items || []);
+        setCurrentTinderIndex(0); setLikedTinderItems([]); setTinderFinalPick(0);
+        const voteDoc = await getDoc(doc(db, "rooms", roomId, "votes", myId));
+        setHasVoted(voteDoc.exists());
+      } else {
+        alert("존재하지 않거나 만료된 투표방입니다.");
+        closeTinderFlow();
+      }
+    } catch (e) { console.error(e); }
+  };
 
   useEffect(() => {
-    if (user && pendingImport) {
-      resetForm();
-      setStoreName(pendingImport.storeName); setMenu(pendingImport.menu); setRating(pendingImport.rating);
-      setComment(pendingImport.comment); setImportedUrls(pendingImport.imageUrls || []);
-      if (knownCategories.includes(pendingImport.category)) { setCategory(pendingImport.category); setShowCustomCategory(false); }
-      else { setCategory("기타"); setCustomCategory(pendingImport.category); setShowCustomCategory(true); }
-      setIsScrapModalOpen(true); setPendingImport(null);
-    } else if (!user && pendingImport) { setAuthMode("signup"); setIsAuthModalOpen(true); }
-  }, [user, pendingImport, knownCategories]);
+    if (!tinderRoomId) return;
+    const unsub = onSnapshot(doc(db, "rooms", tinderRoomId), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setRoomData(data);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u); setAuthLoading(false);
-      if (u) { setIsAuthModalOpen(false); setAuthMode("login"); setAuthEmail(""); setAuthPassword(""); }
+        setTinderState((prevState) => {
+          if (data.status === 'waiting' && prevState === 'setup') return 'share_room';
+          if (data.status === 'playing' && (prevState === 'setup' || prevState === 'share_room')) {
+            return hasVoted ? 'leaderboard' : 'playing';
+          }
+          if (data.status === 'closed' && (prevState === 'setup' || prevState === 'share_room' || prevState === 'playing')) {
+            return 'leaderboard';
+          }
+          return prevState;
+        });
+      }
     });
-    return () => unsubscribe();
+    return () => unsub();
+  }, [tinderRoomId, hasVoted]);
+
+  useEffect(() => {
+    if (!tinderRoomId || tinderState !== 'leaderboard') return;
+    const unsub = onSnapshot(collection(db, "rooms", tinderRoomId, "votes"), (snap) => {
+      const voteCounts: Record<string, number> = {};
+      snap.forEach(doc => {
+        const userLikes = doc.data().likes || [];
+        userLikes.forEach((itemName: string) => { voteCounts[itemName] = (voteCounts[itemName] || 0) + 1; });
+      });
+      const sortedLeaderboard = Object.entries(voteCounts)
+        .map(([name, count]) => ({ name, count, item: tinderItems.find(i => (i.type === 'menu' ? i.name : i.data.id) === name) }))
+        .filter(item => item.item !== undefined)
+        .sort((a, b) => b.count - a.count);
+      setRoomLeaderboard(sortedLeaderboard);
+    });
+    return () => unsub();
+  }, [tinderRoomId, tinderState, tinderItems]);
+
+  useEffect(() => {
+    if (!user) { setActiveBadge(null); setPartnerUids([]); setProfileNickname(""); setProfilePhotoUrl(""); return; }
+    const unsub = onSnapshot(doc(db, "users", user.uid), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.selectedBadge) setActiveBadge(data.selectedBadge);
+        if (data.partnerUids) setPartnerUids(data.partnerUids);
+        if (data.nickname === undefined) setDoc(doc(db, "users", user.uid), { nickname: user.displayName || "나", photoUrl: user.photoURL || "" }, { merge: true });
+        setProfileNickname(data.nickname || user.displayName || "나");
+        setProfilePhotoUrl(data.photoUrl || user.photoURL || "");
+      } else {
+        setDoc(doc(db, "users", user.uid), { nickname: user.displayName || "나", photoUrl: user.photoURL || "", partnerUids: [] }, { merge: true });
+      }
+    });
+    return () => unsub();
+  }, [user]);
+
+  useEffect(() => {
+    if (partnerUids.length === 0) { setPartnersData({}); return; }
+    const unsubs = partnerUids.map(uid => onSnapshot(doc(db, "users", uid), (snap) => {
+      if (snap.exists()) setPartnersData(prev => ({ ...prev, [uid]: { ...snap.data(), uid } }));
+    }));
+    return () => unsubs.forEach(unsub => unsub());
+  }, [partnerUids]);
+
+  useEffect(() => {
+    if (!user) { setReviews([]); setTotalCount(0); return; }
+    const targetUids = showGroupRecords ? [user.uid, ...partnerUids] : [user.uid];
+    const unsubs: any[] = [];
+    const allFetchedReviews: Review[] = [];
+
+    targetUids.forEach(uid => {
+      let q = query(collection(db, "users", uid, "reviews"), orderBy("createdAt", "desc"), limit(30));
+      if (filterCategory !== "전체") q = query(collection(db, "users", uid, "reviews"), where("category", "==", filterCategory), orderBy("createdAt", "desc"), limit(30));
+
+      const unsub = onSnapshot(q, (snap) => {
+        let uPhoto = ""; let uName = "친구";
+        if (uid === user.uid) { uPhoto = profilePhotoUrl; uName = profileNickname; }
+        else if (partnersData[uid]) { uPhoto = partnersData[uid].photoUrl || ""; uName = partnersData[uid].nickname || "친구"; }
+
+        const userReviews = snap.docs.map(d => ({ id: d.id, ...d.data() as any, userId: uid, userPhoto: uPhoto, userName: uName }));
+        const otherUsersReviews = allFetchedReviews.filter((r: Review) => r.userId !== uid);
+        allFetchedReviews.length = 0;
+        allFetchedReviews.push(...otherUsersReviews, ...userReviews);
+        allFetchedReviews.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+
+        setReviews([...allFetchedReviews]);
+        setTotalCount(allFetchedReviews.length);
+        setKnownCategories(prev => {
+          const newCats = allFetchedReviews.map((r: Review) => r.category).filter((c: string) => !prev.includes(c));
+          return newCats.length > 0 ? [...prev, ...newCats] : prev;
+        });
+      });
+      unsubs.push(unsub);
+    });
+    return () => unsubs.forEach(fn => fn());
+  }, [user, showGroupRecords, partnerUids, filterCategory, profileNickname, profilePhotoUrl, partnersData]);
+
+  useEffect(() => {
+    const script = document.createElement("script"); script.src = "https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js"; script.async = true;
+    document.head.appendChild(script); return () => { if (document.head.contains(script)) document.head.removeChild(script); };
   }, []);
 
-  // 핸들러 영역
   const handleSaveProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return;
-    setIsSavingProfile(true);
+    e.preventDefault(); if (!user) return; setIsSavingProfile(true);
     try {
       let finalPhotoUrl = profilePhotoUrl;
       if (profileImageFile) {
-        const storageRef = ref(storage, `users/${user.uid}/profile_${Date.now()}`);
-        await uploadBytes(storageRef, profileImageFile);
-        finalPhotoUrl = await getDownloadURL(storageRef);
+        const storageRef = ref(storage, `users/${user.uid}/profile_${Date.now()}`); await uploadBytes(storageRef, profileImageFile); finalPhotoUrl = await getDownloadURL(storageRef);
       }
       await setDoc(doc(db, "users", user.uid), { nickname: profileNickname, photoUrl: finalPhotoUrl }, { merge: true });
       setIsProfileModalOpen(false); setProfileImageFile(null);
-    } catch (e) { console.error(e); alert("프로필 저장 실패"); }
-    setIsSavingProfile(false);
+    } catch (e) { alert("프로필 저장 실패"); } setIsSavingProfile(false);
   };
 
   const handleProfileImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setProfileImageFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => setProfilePhotoUrl(reader.result as string);
-      reader.readAsDataURL(file);
+      const file = e.target.files[0]; setProfileImageFile(file);
+      const reader = new FileReader(); reader.onloadend = () => setProfilePhotoUrl(reader.result as string); reader.readAsDataURL(file);
     }
   };
 
@@ -508,83 +462,53 @@ export default function Home() {
     if (!user || !partnerCode || partnerCode.trim().length < 5) return;
     if (partnerCode.trim() === user.uid) { alert("자신의 코드는 입력할 수 없습니다."); return; }
     if (partnerUids.includes(partnerCode.trim())) { alert("이미 연결된 친구입니다."); return; }
-
     setIsConnecting(true);
     try {
       const partnerDoc = await getDoc(doc(db, "users", partnerCode.trim()));
       if (!partnerDoc.exists()) { alert("유효하지 않은 연결 코드입니다."); setIsConnecting(false); return; }
-
-      const myRef = doc(db, "users", user.uid);
-      const partnerRef = doc(db, "users", partnerCode.trim());
-
-      await setDoc(myRef, { partnerUids: arrayUnion(partnerCode.trim()) }, { merge: true });
-      await setDoc(partnerRef, { partnerUids: arrayUnion(user.uid) }, { merge: true });
-
+      await setDoc(doc(db, "users", user.uid), { partnerUids: arrayUnion(partnerCode.trim()) }, { merge: true });
+      await setDoc(doc(db, "users", partnerCode.trim()), { partnerUids: arrayUnion(user.uid) }, { merge: true });
       alert("축하합니다! 친구와 지도가 성공적으로 연결되었습니다. 🎉");
       setPartnerCode(""); setShowGroupRecords(true);
-    } catch (e) { console.error(e); alert("연결 중 오류 발생"); }
-    setIsConnecting(false);
+    } catch (e) { alert("연결 중 오류 발생"); } setIsConnecting(false);
   };
 
   const handleDisconnect = async (partnerUid: string, partnerName: string) => {
     if (!user || !window.confirm(`${partnerName}님과의 공유를 끊으시겠습니까?`)) return;
     try {
-      const myRef = doc(db, "users", user.uid);
-      const partnerRef = doc(db, "users", partnerUid);
-      await updateDoc(myRef, { partnerUids: arrayRemove(partnerUid) });
-      await updateDoc(partnerRef, { partnerUids: arrayRemove(user.uid) });
+      await updateDoc(doc(db, "users", user.uid), { partnerUids: arrayRemove(partnerUid) });
+      await updateDoc(doc(db, "users", partnerUid), { partnerUids: arrayRemove(user.uid) });
       if (selectedAuthorFilter === partnerUid) setSelectedAuthorFilter("all");
-    } catch (e) { console.error(e); alert("연결 해제 오류"); }
+    } catch (e) { alert("연결 해제 오류"); }
   };
 
   const openBadgeModal = async () => {
     setIsBadgeModalOpen(true); setBadgeTab("general");
-    if (!user) return;
-    setIsLoadingBadges(true);
+    if (!user) return; setIsLoadingBadges(true);
     try {
       const snap = await getDocs(collection(db, "users", user.uid, "reviews"));
       const counts: Record<string, number> = {};
       snap.forEach(doc => { const cat = doc.data().category || "기타"; counts[cat] = (counts[cat] || 0) + 1; });
       setBadgeStats({ total: snap.size, categories: counts });
-    } catch (e) { console.error(e); }
-    setIsLoadingBadges(false);
+    } catch (e) { } setIsLoadingBadges(false);
   };
 
   const handleSelectBadge = async (badge: any, type: 'general' | 'category') => {
     if (!user) return;
-    const userDocRef = doc(db, "users", user.uid);
-    await setDoc(userDocRef, {
-      selectedBadge: { icon: badge.icon, title: badge.title, color: badge.color || "text-stone-800", bg: badge.bg || (type === 'category' ? "bg-white border-stone-200" : "bg-stone-100 border-stone-200") }
-    }, { merge: true });
+    await setDoc(doc(db, "users", user.uid), { selectedBadge: { icon: badge.icon, title: badge.title, color: badge.color || "text-stone-800", bg: badge.bg || (type === 'category' ? "bg-white border-stone-200" : "bg-stone-100 border-stone-200") } }, { merge: true });
   };
 
-  const executeSearch = (menuName: string) => {
-    setRecommendedMenu(menuName);
-    setIsSpinning(false);
-    setNearbySaved([]);
-    setNearbyExternal([]);
-
-    if (userLocation) {
-      searchLocationBasedPlaces(menuName, userLocation.lat, userLocation.lng, sortOrder);
-    } else {
-      setIsLocating(true);
-      if (!navigator.geolocation) { setLocationError("위치 기능을 지원하지 않습니다."); setIsLocating(false); return; }
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const lat = pos.coords.latitude; const lng = pos.coords.longitude;
-          setUserLocation({ lat, lng });
-          searchLocationBasedPlaces(menuName, lat, lng, sortOrder);
-        },
-        (err) => { setLocationError("위치 권한을 허용해 주세요."); setIsLocating(false); },
-        { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
-      );
-    }
+  const executeSearchWithRoomLocation = (menuName: string) => {
+    setRecommendedMenu(menuName); setIsSpinning(false); setNearbySaved([]); setNearbyExternal([]); setIsLocating(true);
+    const searchLat = roomData?.location?.lat || userLocation?.lat || 37.498095;
+    const searchLng = roomData?.location?.lng || userLocation?.lng || 127.027610;
+    searchLocationBasedPlaces(menuName, searchLat, searchLng, sortOrder);
   };
 
   const searchLocationBasedPlaces = async (menu: string, lat: number, lng: number, sort: string) => {
     setIsLocating(true);
     try {
-      const KAKAO_KEY = "deb0556cf6ab2cc0e38a558fd65ae01b"; // 🚨 REST API 키 필수!
+      const KAKAO_KEY = "deb0556cf6ab2cc0e38a558fd65ae01b"; // 🚨 REST API 키 입력
       const res = await fetch(`https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(menu)}&y=${lat}&x=${lng}&radius=3000&size=15&sort=${sort}`, {
         headers: { Authorization: `KakaoAK ${KAKAO_KEY}` }
       });
@@ -645,32 +569,17 @@ export default function Home() {
   };
 
   const handleAddReview = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!storeName || !menu || !comment || !user) return;
-    setIsSubmitting(true);
+    e.preventDefault(); if (!storeName || !menu || !comment || !user) return; setIsSubmitting(true);
     const finalCategory = showCustomCategory && customCategory.trim() ? customCategory.trim() : category;
     try {
       const urls = [];
       for (const file of imageFiles) {
-        const storageRef = ref(storage, `users/${user.uid}/reviews/${Date.now()}_${file.name}`);
-        await uploadBytes(storageRef, file); urls.push(await getDownloadURL(storageRef));
+        const storageRef = ref(storage, `users/${user.uid}/reviews/${Date.now()}_${file.name}`); await uploadBytes(storageRef, file); urls.push(await getDownloadURL(storageRef));
       }
       const finalUrls = [...importedUrls, ...urls].slice(0, 5);
       await addDoc(collection(db, "users", user.uid, "reviews"), { storeName, menu, rating, comment, category: finalCategory, imageUrls: finalUrls, createdAt: serverTimestamp() });
       resetForm(); setIsScrapModalOpen(false);
-    } catch (e) { console.error(e); }
-    setIsSubmitting(false);
-  };
-
-  const handleImagesSelect = (e: React.ChangeEvent<HTMLInputElement>, currentTotal: number, setFiles: React.Dispatch<React.SetStateAction<File[]>>, setPreviews: React.Dispatch<React.SetStateAction<string[]>>) => {
-    const files = e.target.files; if (!files || files.length === 0) return;
-    const allowedCount = 5 - currentTotal; if (allowedCount <= 0) return;
-    const newFilesArray = Array.from(files).slice(0, allowedCount);
-    setFiles((prev) => [...prev, ...newFilesArray]);
-    const readPromises = newFilesArray.map((file) => {
-      return new Promise<string>((resolve) => { const reader = new FileReader(); reader.onloadend = () => resolve(reader.result as string); reader.readAsDataURL(file); });
-    });
-    Promise.all(readPromises).then((results) => { setPreviews((prev) => [...prev, ...results]); e.target.value = ""; });
+    } catch (e) { } setIsSubmitting(false);
   };
 
   const openEditModal = (review: Review) => {
@@ -684,21 +593,26 @@ export default function Home() {
     const finalCat = editShowCustomCategory && editCustomCategory.trim() ? editCustomCategory.trim() : editCategory;
     try {
       let finalUrls = [...editExistingUrls];
-      if (editImageFiles.length > 0) {
-        for (const file of editImageFiles) {
-          const sRef = ref(storage, `users/${user.uid}/reviews/${Date.now()}_${file.name}`);
-          await uploadBytes(sRef, file); finalUrls.push(await getDownloadURL(sRef));
-        }
+      for (const file of editImageFiles) {
+        const sRef = ref(storage, `users/${user.uid}/reviews/${Date.now()}_${file.name}`); await uploadBytes(sRef, file); finalUrls.push(await getDownloadURL(sRef));
       }
       await updateDoc(doc(db, "users", user.uid, "reviews", editingReview.id), { storeName: editStoreName, menu: editMenu, rating: editRating, comment: editComment, category: finalCat, imageUrls: finalUrls.slice(0, 5) });
       setEditingReview(null);
-    } catch (e) { console.error(e); }
-    setIsUpdating(false);
+    } catch (e) { } setIsUpdating(false);
   };
 
   const handleDeleteReview = async (id: string) => {
     if (!user || !window.confirm("삭제할까요?")) return;
-    try { await deleteDoc(doc(db, "users", user.uid, "reviews", id)); } catch (e) { console.error(e); }
+    await deleteDoc(doc(db, "users", user.uid, "reviews", id));
+  };
+
+  const handleImagesSelect = (e: React.ChangeEvent<HTMLInputElement>, currentTotal: number, setFiles: React.Dispatch<React.SetStateAction<File[]>>, setPreviews: React.Dispatch<React.SetStateAction<string[]>>) => {
+    const files = e.target.files; if (!files || files.length === 0) return;
+    const allowedCount = 5 - currentTotal; if (allowedCount <= 0) return;
+    const newFilesArray = Array.from(files).slice(0, allowedCount);
+    setFiles((prev) => [...prev, ...newFilesArray]);
+    Promise.all(newFilesArray.map((file) => new Promise<string>((resolve) => { const reader = new FileReader(); reader.onloadend = () => resolve(reader.result as string); reader.readAsDataURL(file); })))
+      .then((results) => { setPreviews((prev) => [...prev, ...results]); e.target.value = ""; });
   };
 
   const handleKakaoShare = () => {
@@ -748,6 +662,7 @@ export default function Home() {
   const handleGoogleLogin = async () => { try { await signInWithPopup(auth, googleProvider); } catch (e) { } };
   const handleLogout = async () => { await signOut(auth); };
 
+  // 🌟 [버그 수정] 틴더 생성 시 인덱스와 데이터를 완전하게 0으로 포맷팅
   const handleCreateRoom = async (mode: 'menu' | 'restaurant') => {
     setTinderMode(mode);
     const newRoomId = generateRandomString();
@@ -765,31 +680,36 @@ export default function Home() {
     }
 
     try {
+      setCurrentTinderIndex(0);
+      setLikedTinderItems([]);
+      setHasVoted(false);
+      setTinderFinalPick(0);
+
+      let hostLat = userLocation?.lat || 37.498095;
+      let hostLng = userLocation?.lng || 127.027610;
+      if (!userLocation && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition((pos) => { hostLat = pos.coords.latitude; hostLng = pos.coords.longitude; setUserLocation({ lat: hostLat, lng: hostLng }); });
+      }
+
       await setDoc(doc(db, "rooms", newRoomId), {
-        mode, items: generatedItems, createdAt: serverTimestamp(), hostUid: user?.uid || guestId
+        mode, items: generatedItems, createdAt: serverTimestamp(), hostUid: myId, status: 'waiting', participants: [myName],
+        location: { lat: hostLat, lng: hostLng }
       });
-      setTinderItems(generatedItems);
-      setTinderRoomId(newRoomId);
-      setTinderState('share_room');
-    } catch (e) { console.error(e); alert("방 생성에 실패했습니다."); }
+      setTinderItems(generatedItems); setTinderRoomId(newRoomId); setTinderState('share_room');
+    } catch (e) { alert("방 생성 실패. 파이어베이스 보안 규칙을 다시 확인해주세요!"); }
   };
 
-  const submitVotes = async () => {
+  const submitVotes = async (finalLikes: any[]) => {
     if (!tinderRoomId) return;
     try {
-      const myId = user ? user.uid : guestId;
-      const myName = user ? profileNickname : guestId;
-      const likeIds = likedTinderItems.map((item: any) => item.type === 'menu' ? item.name : item.data.id);
-
+      const likeIds = finalLikes.map((item: any) => item.type === 'menu' ? item.name : item.data.id);
       await setDoc(doc(db, "rooms", tinderRoomId, "votes", myId), { voterName: myName, likes: likeIds, timestamp: serverTimestamp() });
       setHasVoted(true);
-      setTinderState('leaderboard');
-    } catch (e) { console.error(e); }
+    } catch (e) { }
   };
 
   const handleSwipe = (direction: 'left' | 'right') => {
-    if (swipeDirection !== null) return;
-    setSwipeDirection(direction);
+    if (swipeDirection !== null) return; setSwipeDirection(direction);
 
     setTimeout(() => {
       let updatedLikes = [...likedTinderItems];
@@ -801,9 +721,14 @@ export default function Home() {
       if (currentTinderIndex + 1 < tinderItems.length) {
         setCurrentTinderIndex(prev => prev + 1);
         setSwipeDirection(null);
-        setTouchCurrentX(0); setTouchStartX(0);
+        setTouchCurrentX(0);
+        setTouchStartX(0);
       } else {
-        submitVotes();
+        submitVotes(updatedLikes);
+        setTinderState('leaderboard');
+        setSwipeDirection(null);
+        setTouchCurrentX(0);
+        setTouchStartX(0);
       }
     }, 300);
   };
@@ -850,178 +775,8 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-[#FFFDF6] text-stone-800 font-sans pb-20">
+    <main className="min-h-screen bg-[#FFFDF6] text-stone-800 font-sans pb-20 relative">
 
-      {/* 🌟 모달들 복원 (친구 맺기, 프로필, 뱃지 도감) */}
-      {isProfileModalOpen && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsProfileModalOpen(false)} />
-          <div className="relative bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in-95">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-black flex items-center gap-2"><Settings className="text-orange-500" /> 내 프로필 설정</h3>
-              <button onClick={() => setIsProfileModalOpen(false)} className="p-1.5 rounded-full bg-stone-100 text-stone-500"><X size={18} /></button>
-            </div>
-
-            <form onSubmit={handleSaveProfile} className="space-y-6">
-              <div className="flex flex-col items-center gap-3">
-                <div className="relative">
-                  <div className="w-24 h-24 rounded-full border-2 border-orange-200 bg-orange-50 overflow-hidden flex items-center justify-center">
-                    {profilePhotoUrl ? <img src={profilePhotoUrl} className="w-full h-full object-cover" /> : <User size={40} className="text-orange-300" />}
-                  </div>
-                  <label className="absolute bottom-0 right-0 bg-white p-2 rounded-full shadow-md border border-stone-200 cursor-pointer hover:bg-stone-50 transition-colors">
-                    <Camera size={16} className="text-stone-600" />
-                    <input type="file" accept="image/*" className="hidden" onChange={handleProfileImageSelect} />
-                  </label>
-                </div>
-                <p className="text-[10px] text-stone-400">사진을 터치해 변경하세요</p>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-stone-500 mb-2 uppercase tracking-wider ml-1">나의 닉네임</label>
-                <input type="text" value={profileNickname} onChange={(e) => setProfileNickname(e.target.value)} required placeholder="닉네임을 입력하세요 (예: 맛잘알 지훈)" maxLength={10} className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-orange-500 outline-none transition-all" />
-              </div>
-              <button type="submit" disabled={isSavingProfile} className="w-full bg-stone-800 hover:bg-black text-white font-black py-4 rounded-xl shadow-lg active:scale-95 transition-all disabled:opacity-50">
-                {isSavingProfile ? <Loader2 className="animate-spin mx-auto" /> : "프로필 저장하기"}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {isSyncModalOpen && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsSyncModalOpen(false)} />
-          <div className="relative bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 max-h-[90vh] flex flex-col">
-            <div className="flex justify-between items-center mb-4 shrink-0">
-              <h3 className="text-xl font-black flex items-center gap-2"><MapPin className="text-blue-500" fill="#E0F2FE" /> 공유 지도 만들기</h3>
-              <button onClick={() => setIsSyncModalOpen(false)} className="p-1.5 rounded-full bg-stone-100 text-stone-500"><X size={18} /></button>
-            </div>
-            <div className="overflow-y-auto scrollbar-hide space-y-6 pb-2">
-              <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 text-center"><p className="text-[13px] font-bold text-blue-800 leading-relaxed">서로의 코드를 입력하면<br />맛집 지도가 하나로 합쳐져요! 🗺️✨</p></div>
-              <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100">
-                <p className="text-[11px] font-bold text-stone-400 mb-2 uppercase tracking-wider">나의 연결 코드</p>
-                <div className="flex items-center justify-between">
-                  <code className="text-sm font-black text-blue-600 tracking-widest bg-white px-2 py-1 rounded shadow-sm border border-stone-100">{user?.uid?.substring(0, 15)}...</code>
-                  <button onClick={() => { navigator.clipboard.writeText(user?.uid || ""); alert("내 코드가 복사되었습니다!"); }} className="p-2 bg-white rounded-lg shadow-sm text-stone-400 hover:text-blue-500"><Copy size={16} /></button>
-                </div>
-              </div>
-              <div className="space-y-3">
-                <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">친구 코드 입력</p>
-                <input type="text" value={partnerCode} onChange={(e) => setPartnerCode(e.target.value)} placeholder="친구의 코드를 붙여넣기 하세요" className="w-full bg-white border border-stone-200 rounded-xl py-4 px-4 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm" />
-                <button onClick={handleConnectPartner} disabled={isConnecting || !partnerCode} className="w-full bg-blue-500 hover:bg-blue-600 text-white font-black py-3.5 rounded-xl shadow-md active:scale-95 transition-all disabled:opacity-50">
-                  {isConnecting ? <Loader2 className="animate-spin mx-auto" /> : "연결 신청하기"}
-                </button>
-              </div>
-              {partnerUids.length > 0 && (
-                <div className="pt-4 border-t border-stone-100">
-                  <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1 mb-3">현재 연결된 친구들</p>
-                  <div className="space-y-2">
-                    {partnerUids.map(uid => {
-                      const p = partnersData[uid];
-                      return (
-                        <div key={uid} className="flex items-center justify-between bg-white border border-stone-100 p-3 rounded-xl shadow-sm">
-                          <div className="flex items-center gap-3">
-                            {p?.photoUrl ? <img src={p.photoUrl} className="w-8 h-8 rounded-full object-cover" /> : <div className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-400"><User size={14} /></div>}
-                            <span className="font-bold text-sm text-stone-700">{p?.nickname || "친구"}</span>
-                          </div>
-                          <button onClick={() => handleDisconnect(uid, p?.nickname || "친구")} className="text-[10px] font-bold bg-red-50 text-red-500 hover:bg-red-100 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors"><UserMinus size={12} /> 연결 끊기</button>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isBadgeModalOpen && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4" onClick={() => setIsBadgeModalOpen(false)}>
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-          <div className="relative bg-white w-full max-w-sm rounded-3xl p-5 shadow-2xl max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4 shrink-0"><h3 className="text-xl font-black flex items-center gap-2"><Star className="text-orange-500 fill-orange-500" size={20} /> 내 뱃지 도감</h3><button onClick={() => setIsBadgeModalOpen(false)} className="p-1.5 rounded-full bg-stone-100"><X size={18} /></button></div>
-            {isLoadingBadges ? <div className="py-20 flex justify-center"><Loader2 className="animate-spin text-orange-500" size={32} /></div> : (
-              <>
-                <div className="bg-orange-50 border border-orange-100 rounded-2xl p-4 mb-3 flex items-center justify-between shrink-0">
-                  <div><p className="text-xs font-bold text-orange-600 mb-0.5">나의 수집 진행도</p><p className="text-sm font-black text-stone-800"><span className="text-orange-500 text-xl">{totalCollectedBadges}</span> / {totalBadgesCount}개</p></div>
-                  <div className="text-right"><p className="text-[11px] text-stone-500 font-medium">Locked</p><p className="text-sm font-bold text-stone-700">🔒 {lockedBadgesCount}개</p></div>
-                </div>
-                <div className="flex border-b border-stone-100 mb-4 shrink-0">
-                  <button onClick={() => setBadgeTab("general")} className={`flex-1 pb-2 font-bold text-sm border-b-2 ${badgeTab === "general" ? "border-orange-500 text-orange-500" : "border-transparent text-stone-400"}`}>🏆 미식가 등급</button>
-                  <button onClick={() => setBadgeTab("category")} className={`flex-1 pb-2 font-bold text-sm border-b-2 ${badgeTab === "category" ? "border-orange-500 text-orange-500" : "border-transparent text-stone-400"}`}>🏷️ 카테고리 뱃지</button>
-                </div>
-                <div className="overflow-y-auto scrollbar-hide flex-1 pb-4 space-y-3">
-                  {badgeTab === "general" ? GENERAL_BADGES.map((b, i) => {
-                    const isUnlocked = badgeStats.total >= b.threshold;
-                    const isSelected = displayBadge.title === b.title;
-                    return (
-                      <div key={i} onClick={() => isUnlocked && handleSelectBadge(b, 'general')} className={`flex items-center gap-4 p-3 rounded-2xl border ${isUnlocked ? (isSelected ? 'border-orange-500 bg-orange-50 ring-2 ring-orange-200' : `${b.bg} cursor-pointer`) : 'bg-stone-50 border-stone-100 grayscale opacity-40'}`}>
-                        <div className="text-3xl shrink-0 w-12 text-center">{isUnlocked ? b.icon : "🔒"}</div>
-                        <div className="flex-1 min-w-0"><div className="flex justify-between items-center mb-0.5"><span className={`font-black text-sm ${isUnlocked ? b.color : 'text-stone-500'}`}>{b.title}</span>{isUnlocked && isSelected && <Check size={16} className="text-orange-500" />}</div><p className="text-[11px] text-stone-500 truncate">{b.desc}</p></div>
-                      </div>
-                    );
-                  }) : Object.entries(CATEGORY_BADGES).map(([cat, badges]) => (
-                    <div key={cat}>
-                      <h4 className="font-extrabold text-stone-700 mb-3 flex justify-between border-b border-stone-100 pb-2"><span>{cat} 영역</span><span className="text-xs bg-stone-100 text-stone-500 px-2 py-1 rounded-lg">누적 {badgeStats.categories[cat] || 0}곳</span></h4>
-                      <div className="grid gap-2">
-                        {badges.map((b: any) => {
-                          const isUnlocked = (badgeStats.categories[cat] || 0) >= b.threshold;
-                          const isSelected = displayBadge.title === b.title;
-                          return (
-                            <div key={b.title} onClick={() => isUnlocked && handleSelectBadge(b, 'category')} className={`flex items-center gap-3 p-3 rounded-2xl border ${isUnlocked ? (isSelected ? 'border-orange-500 bg-orange-50 ring-2 ring-orange-200' : 'bg-white border-orange-100 cursor-pointer') : 'bg-stone-50 border-stone-100 grayscale opacity-40'}`}>
-                              <div className="text-2xl shrink-0 w-10 text-center">{isUnlocked ? b.icon : "🔒"}</div>
-                              <div className="flex-1 min-w-0"><div className="flex justify-between items-center mb-0.5"><span className="font-bold text-sm text-stone-800">{b.title}</span>{isUnlocked && isSelected && <Check size={16} className="text-orange-500" />}</div><p className="text-[11px] text-stone-500 truncate">{b.desc}</p></div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {isAuthModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <div className="relative bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in-95">
-            <div className="flex justify-end mb-2"><button onClick={() => { setIsAuthModalOpen(false); setAuthError(""); setResetMessage(""); }} className="p-1.5 rounded-full bg-stone-100"><X size={18} /></button></div>
-            {authMode === "reset" ? (
-              <>
-                <div className="text-center mb-6"><div className="inline-flex bg-orange-100 p-3 rounded-full text-orange-500 mb-3"><Lock size={28} /></div><h3 className="text-xl font-black mb-2">비밀번호 재설정</h3></div>
-                <form onSubmit={handlePasswordReset} className="space-y-4">
-                  <input type="email" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} required placeholder="이메일 주소" className="w-full py-3 px-4 bg-stone-50 rounded-xl border border-stone-200" />
-                  {authError && <p className="text-xs text-red-500 text-center">{authError}</p>}
-                  <button type="submit" className="w-full bg-orange-500 text-white font-bold py-3.5 rounded-xl">재설정 메일 보내기</button>
-                  <button type="button" onClick={() => setAuthMode("login")} className="w-full text-sm font-bold text-stone-400">로그인으로 돌아가기</button>
-                </form>
-              </>
-            ) : (
-              <>
-                <div className="text-center mb-6"><div className="inline-flex bg-orange-100 p-3 rounded-full text-orange-500 mb-3"><ChefHat size={28} /></div><h3 className="text-xl font-black mb-2">나만의 맛집 지도 만들기</h3></div>
-                <div className="flex p-1 bg-stone-100 rounded-xl mb-6">
-                  <button onClick={() => setAuthMode("login")} className={`flex-1 py-2 text-sm font-bold rounded-lg ${authMode === "login" ? "bg-white shadow-sm" : "text-stone-400"}`}>로그인</button>
-                  <button onClick={() => setAuthMode("signup")} className={`flex-1 py-2 text-sm font-bold rounded-lg ${authMode === "signup" ? "bg-white shadow-sm" : "text-stone-400"}`}>회원가입</button>
-                </div>
-                <form onSubmit={handleEmailAuth} className="space-y-4">
-                  <input type="email" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} required placeholder="이메일 주소" className="w-full py-3 px-4 bg-stone-50 rounded-xl border border-stone-200" />
-                  <input type={showPassword ? "text" : "password"} value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} required placeholder="비밀번호" className="w-full py-3 px-4 bg-stone-50 rounded-xl border border-stone-200" />
-                  {authError && <p className="text-xs text-red-500 text-center">{authError}</p>}
-                  <button type="submit" className="w-full bg-stone-800 text-white font-bold py-3.5 rounded-xl">{authMode === "login" ? "로그인" : "가입하기"}</button>
-                </form>
-                <div className="relative my-6 flex items-center py-2"><div className="flex-grow border-t border-stone-200"></div><span className="mx-4 text-stone-400 text-xs">또는</span><div className="flex-grow border-t border-stone-200"></div></div>
-                <button onClick={handleGoogleLogin} className="w-full flex items-center justify-center gap-2 bg-white border border-stone-200 font-bold py-3.5 rounded-xl shadow-sm">구글로 시작하기</button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-
-      {/* 🌟 2. 헤더 고정 및 레이어(Z-index) 정리 완료 */}
       <header className="fixed top-0 left-0 right-0 bg-white z-[100] border-b border-orange-100 shadow-md">
         <div className="max-w-md mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -1032,7 +787,7 @@ export default function Home() {
             <div className="shrink-0 pl-2">
               {user ? (
                 <div className="flex items-center gap-2.5">
-                  <button onClick={() => setIsSyncModalOpen(true)} className={`p-2 rounded-full transition-colors ${partnerUids.length > 0 ? 'bg-blue-50 text-blue-500 hover:bg-blue-100' : 'bg-stone-50 text-stone-400 hover:bg-stone-100'} cursor-pointer`}><Users size={18} /></button>
+                  <button onClick={() => setIsSyncModalOpen(true)} className="p-2 rounded-full bg-stone-50 text-stone-400 hover:bg-stone-100 cursor-pointer transition-colors"><Users size={18} /></button>
                   <button onClick={() => setIsProfileModalOpen(true)} className="flex items-center gap-1.5 bg-stone-50 hover:bg-stone-100 pl-1.5 pr-3 py-1.5 rounded-full transition-colors cursor-pointer">
                     {profilePhotoUrl ? <img src={profilePhotoUrl} className="w-6 h-6 rounded-full object-cover border border-stone-200" /> : <div className="w-6 h-6 rounded-full bg-stone-200 flex items-center justify-center text-stone-500"><User size={12} /></div>}
                     <span className="text-[11px] font-bold text-stone-600 truncate max-w-[60px]">{profileNickname}</span>
@@ -1046,8 +801,8 @@ export default function Home() {
         </div>
       </header>
 
-      {/* 헤더 아래 여백 부여 (pt-24) */}
       <div className="max-w-md mx-auto px-6 pt-24 pb-20 space-y-8 relative z-10">
+
         {user && !authLoading && (
           <div onClick={openBadgeModal} className="bg-white rounded-3xl p-5 shadow-sm border border-orange-100 flex items-center justify-between cursor-pointer relative z-20">
             <div className="flex items-center gap-4">
@@ -1058,7 +813,7 @@ export default function Home() {
           </div>
         )}
 
-        <section onClick={() => handleCreateRoom('menu')} className="relative overflow-hidden bg-gradient-to-r from-rose-500 to-orange-500 rounded-3xl p-6 shadow-lg cursor-pointer transform hover:scale-[1.02] transition-transform active:scale-95 group">
+        <section onClick={() => setTinderState('setup')} className="relative overflow-hidden bg-gradient-to-r from-rose-500 to-orange-500 rounded-3xl p-6 shadow-lg cursor-pointer transform hover:scale-[1.02] transition-transform active:scale-95 group z-20">
           <div className="absolute top-0 right-0 -mt-4 -mr-4 text-white opacity-20 transform rotate-12 group-hover:scale-110 transition-transform duration-500"><Flame size={120} /></div>
           <div className="relative z-10 flex items-center justify-between">
             <div className="text-left text-white space-y-1">
@@ -1126,7 +881,7 @@ export default function Home() {
         </section>
 
         {!user && !authLoading && (
-          <section className="relative bg-white rounded-3xl border border-stone-100 overflow-hidden shadow-sm mt-12 mb-12 animate-in fade-in-up duration-500">
+          <section className="relative bg-white rounded-3xl border border-stone-100 overflow-hidden shadow-sm mt-12 mb-12 animate-in fade-in-up duration-500 z-20">
             <div className="p-6 filter blur-[6px] opacity-40 select-none pointer-events-none space-y-6">
               <div className="flex items-center gap-2 mb-2"><Star className="text-stone-400 fill-stone-400" size={18} /><h2 className="font-bold text-stone-800">맛집 직접 기록</h2></div>
               <div className="w-full bg-stone-100 rounded-xl h-12"></div>
@@ -1150,7 +905,7 @@ export default function Home() {
         )}
 
         {user && (
-          <section className="space-y-6">
+          <section className="space-y-6 z-20 relative">
             <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between">
                 <h2 className="font-bold text-stone-800">맛집 리스트 <span className="text-orange-500">{filteredReviews.length}</span></h2>
@@ -1225,84 +980,128 @@ export default function Home() {
           </section>
         )}
 
-        <section className="bg-white rounded-3xl p-6 shadow-sm border border-orange-50 space-y-5">
-          <div className="flex items-center gap-2 mb-2"><Star className="text-orange-500 fill-orange-500" size={18} /><h2 className="font-bold text-stone-800">맛집 직접 기록</h2></div>
-          <input type="text" value={storeName} onChange={(e) => setStoreName(e.target.value)} placeholder="가게 이름" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 outline-none text-sm focus:ring-2 focus:ring-orange-500" />
-          <div className="grid grid-cols-2 gap-3">
-            <input type="text" value={menu} onChange={(e) => setMenu(e.target.value)} placeholder="메뉴" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 outline-none text-sm focus:ring-2 focus:ring-orange-500" />
-            <div className="flex items-center justify-center bg-stone-50 border border-stone-100 rounded-xl gap-1">
-              {[1, 2, 3, 4, 5].map(s => <Star key={s} size={18} onClick={() => setRating(s)} className={`cursor-pointer ${rating >= s ? 'text-amber-400 fill-amber-400' : 'text-stone-300'}`} />)}
+        {user && (
+          <section className="bg-white rounded-3xl p-6 shadow-sm border border-orange-50 space-y-5 z-20 relative">
+            <div className="flex items-center gap-2 mb-2"><Star className="text-orange-500 fill-orange-500" size={18} /><h2 className="font-bold text-stone-800">맛집 직접 기록</h2></div>
+            <input type="text" value={storeName} onChange={(e) => setStoreName(e.target.value)} placeholder="가게 이름" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 outline-none text-sm focus:ring-2 focus:ring-orange-500" />
+            <div className="grid grid-cols-2 gap-3">
+              <input type="text" value={menu} onChange={(e) => setMenu(e.target.value)} placeholder="메뉴" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 outline-none text-sm focus:ring-2 focus:ring-orange-500" />
+              <div className="flex items-center justify-center bg-stone-50 border border-stone-100 rounded-xl gap-1">
+                {[1, 2, 3, 4, 5].map(s => <Star key={s} size={18} onClick={() => setRating(s)} className={`cursor-pointer ${rating >= s ? 'text-amber-400 fill-amber-400' : 'text-stone-300'}`} />)}
+              </div>
             </div>
-          </div>
-          <CategorySelector value={category} onChange={setCategory} showCustom={showCustomCategory} onToggleCustom={() => setShowCustomCategory(!showCustomCategory)} customValue={customCategory} onCustomChange={setCustomCategory} availableCats={knownCategories} />
-          <MultiImagePicker existingUrls={[]} newPreviews={imagePreviews} onSelect={(e: any, t: number) => handleImagesSelect(e, t, setImageFiles, setImagePreviews)} onRemoveExisting={() => { }} onRemoveNew={(idx: number) => { setImageFiles(p => p.filter((_, i) => i !== idx)); setImagePreviews(p => p.filter((_, i) => i !== idx)); }} />
-          <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="한줄평" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 h-24 resize-none outline-none text-sm focus:ring-2 focus:ring-orange-500" />
-          <button onClick={handleAddReview} disabled={isSubmitting} className="w-full bg-orange-500 text-white font-bold py-4 rounded-xl shadow-lg">{isSubmitting ? "저장 중..." : "기록 저장하기"}</button>
-        </section>
+            <CategorySelector value={category} onChange={setCategory} showCustom={showCustomCategory} onToggleCustom={() => setShowCustomCategory(!showCustomCategory)} customValue={customCategory} onCustomChange={setCustomCategory} availableCats={knownCategories} />
+            <MultiImagePicker existingUrls={[]} newPreviews={imagePreviews} onSelect={(e: any, t: number) => handleImagesSelect(e, t, setImageFiles, setImagePreviews)} onRemoveExisting={() => { }} onRemoveNew={(idx: number) => { setImageFiles(p => p.filter((_, i) => i !== idx)); setImagePreviews(p => p.filter((_, i) => i !== idx)); }} />
+            <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="한줄평" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 h-24 resize-none outline-none text-sm focus:ring-2 focus:ring-orange-500" />
+            <button onClick={handleAddReview} disabled={isSubmitting} className="w-full bg-orange-500 text-white font-bold py-4 rounded-xl shadow-lg">{isSubmitting ? "저장 중..." : "기록 저장하기"}</button>
+          </section>
+        )}
       </div>
 
+      {/* ========================================================================= */}
+      {/* 🌟 단일 모달 트리 (z-[200] 이상 배치로 절대 클릭 안 먹히는 버그 방지) */}
+      {/* ========================================================================= */}
+
+      {/* 1. 틴더 관련 모달창 */}
       {tinderState !== 'idle' && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-stone-900/95 backdrop-blur-md overflow-hidden">
-          <button onClick={() => setTinderState('idle')} className="absolute top-6 right-6 p-2 bg-white/10 rounded-full text-white hover:bg-white/20 transition-colors z-50"><X size={24} /></button>
+        <div className="fixed inset-0 z-[250] flex items-center justify-center bg-stone-900/95 backdrop-blur-md overflow-hidden p-4">
 
           {tinderState === 'setup' && (
-            <div className="w-full max-w-sm px-6 animate-in zoom-in-95 duration-300">
-              <div className="text-center mb-10">
-                <Flame size={48} className="mx-auto text-rose-500 mb-4 animate-pulse" />
-                <h2 className="text-3xl font-black text-white mb-2 tracking-tight">투표방 열기</h2>
-                <p className="text-stone-400 font-medium">링크를 공유해서 다같이 결정하세요!</p>
+            <div className="bg-white rounded-[2rem] p-6 shadow-2xl relative w-full max-w-sm flex flex-col overflow-hidden animate-in zoom-in-95">
+              <button onClick={closeTinderFlow} className="absolute top-4 right-4 p-1.5 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 transition-colors z-50 cursor-pointer"><X size={18} /></button>
+
+              <div className="text-center mb-8 mt-6">
+                <Flame size={40} className="mx-auto text-rose-500 mb-3 animate-pulse" />
+                <h2 className="text-2xl font-black text-stone-800 mb-1 tracking-tight">투표방 열기</h2>
+                <p className="text-xs text-stone-500 font-medium">링크를 공유해서 다같이 결정하세요!</p>
               </div>
               <div className="space-y-4">
-                <button onClick={() => handleCreateRoom('menu')} className="w-full bg-white rounded-3xl p-5 text-left shadow-2xl transform active:scale-95 transition-transform group border border-transparent hover:border-orange-400">
+                <button onClick={() => handleCreateRoom('menu')} className="w-full bg-orange-50 rounded-2xl p-5 text-left border border-orange-100 hover:border-orange-400 cursor-pointer transition-colors group">
                   <div className="flex justify-between items-center mb-2">
                     <span className="bg-orange-100 text-orange-600 text-[10px] font-black px-2 py-1 rounded uppercase tracking-wider">Track A</span>
-                    <Flame size={18} className="text-orange-400" />
                   </div>
-                  <h3 className="text-xl font-black text-stone-800 mb-1 group-hover:text-orange-600 transition-colors">메뉴 이상형 월드컵</h3>
-                  <p className="text-xs text-stone-500 font-medium leading-relaxed break-keep">랜덤으로 뽑힌 10가지 메뉴 중에서<br />다수가 좋아하는 메뉴를 찾아냅니다.</p>
+                  <h3 className="text-lg font-black text-orange-700 mb-1">메뉴 이상형 월드컵</h3>
+                  <p className="text-[11px] text-orange-600/80 font-medium leading-relaxed break-keep">랜덤으로 뽑힌 10가지 메뉴 중에서<br />다수가 좋아하는 메뉴를 찾아냅니다.</p>
                 </button>
                 <button
                   onClick={() => filteredReviews.length >= 5 ? handleCreateRoom('restaurant') : null}
-                  className={`w-full rounded-3xl p-5 text-left shadow-2xl transition-all ${filteredReviews.length >= 5 ? 'bg-stone-800 border border-stone-700 transform active:scale-95 group hover:border-rose-500' : 'bg-stone-800/50 border border-stone-800/50 cursor-not-allowed'}`}
+                  className={`w-full rounded-2xl p-5 text-left border transition-all ${filteredReviews.length >= 5 ? 'bg-stone-50 border-stone-200 hover:border-rose-400 cursor-pointer group' : 'bg-stone-100 border-stone-200 cursor-not-allowed opacity-60'}`}
                 >
                   <div className="flex justify-between items-center mb-2">
-                    <span className="bg-stone-700 text-stone-300 text-[10px] font-black px-2 py-1 rounded uppercase tracking-wider">Track B</span>
-                    {filteredReviews.length >= 5 ? <Star size={18} className="text-rose-500 fill-rose-500" /> : <Lock size={16} className="text-stone-500" />}
+                    <span className="bg-stone-200 text-stone-600 text-[10px] font-black px-2 py-1 rounded uppercase tracking-wider">Track B</span>
+                    {filteredReviews.length >= 5 ? null : <Lock size={14} className="text-stone-400" />}
                   </div>
-                  <h3 className={`text-xl font-black mb-1 transition-colors ${filteredReviews.length >= 5 ? 'text-white group-hover:text-rose-400' : 'text-stone-500'}`}>찐 맛집 데스매치</h3>
+                  <h3 className={`text-lg font-black mb-1 ${filteredReviews.length >= 5 ? 'text-stone-800' : 'text-stone-500'}`}>찐 맛집 데스매치</h3>
                   {filteredReviews.length >= 5 ? (
-                    <p className="text-xs text-stone-400 font-medium leading-relaxed break-keep">우리가 저장한 맛집 리스트 중에서<br />오늘 갈 곳을 투표로 결정합니다.</p>
+                    <p className="text-[11px] text-stone-500 font-medium leading-relaxed break-keep">우리가 저장한 맛집 리스트 중에서<br />오늘 갈 곳을 투표로 결정합니다.</p>
                   ) : (
-                    <p className="text-[11px] text-rose-500/80 font-bold mt-2 bg-rose-500/10 inline-block px-2 py-1 rounded">🔒 맛집 5개 이상 필요 (현재 {filteredReviews.length}개)</p>
+                    <p className="text-[10px] text-rose-500 font-bold mt-2 bg-rose-50 inline-block px-2 py-1 rounded">🔒 맛집 5개 이상 필요 (현재 {filteredReviews.length}개)</p>
                   )}
                 </button>
               </div>
             </div>
           )}
 
-          {tinderState === 'share_room' && (
-            <div className="w-full max-w-sm px-6 animate-in slide-in-from-bottom-10 text-center">
-              <div className="bg-white rounded-3xl p-8 shadow-2xl">
-                <div className="w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-4"><Users size={32} /></div>
-                <h3 className="text-2xl font-black text-stone-800 mb-2">방이 생성되었습니다!</h3>
-                <p className="text-sm text-stone-500 mb-6 break-keep">단톡방에 링크를 공유하고 친구들을 초대하세요.</p>
-                <div className="bg-stone-100 p-3 rounded-xl flex items-center justify-between mb-6 border border-stone-200">
-                  <span className="text-sm font-bold text-stone-600 tracking-wider pl-2 truncate">{window.location.origin}/?room={tinderRoomId}</span>
-                  <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/?room=${tinderRoomId}`); alert('초대 링크가 복사되었습니다!'); }} className="bg-white p-2 rounded-lg shadow-sm text-blue-500 hover:text-blue-600 transition-colors"><Copy size={16} /></button>
+          {tinderState === 'share_room' && roomData && (
+            <div className="bg-white rounded-[2rem] p-6 shadow-2xl relative w-full max-w-sm flex flex-col h-[550px] overflow-hidden animate-in zoom-in-95 text-center">
+              <button onClick={closeTinderFlow} className="absolute top-4 right-4 p-1.5 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 transition-colors z-50 cursor-pointer"><X size={18} /></button>
+
+              <div className="shrink-0 mt-6">
+                <div className="w-14 h-14 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-3"><Users size={28} /></div>
+                <h3 className="text-xl font-black text-stone-800 mb-1">투표 대기방</h3>
+                <p className="text-[11px] text-stone-500 mb-4 break-keep">단톡방에 링크를 공유하고<br />친구들을 초대하세요.</p>
+                <div className="bg-stone-50 p-2.5 rounded-xl flex items-center justify-between mb-4 border border-stone-200">
+                  <span className="text-xs font-bold text-stone-600 tracking-wider pl-2 truncate">{window.location.origin}/?room={tinderRoomId}</span>
+                  <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/?room=${tinderRoomId}`); alert('초대 링크가 복사되었습니다!'); }} className="bg-white p-1.5 rounded-md shadow-sm text-blue-500 hover:text-blue-600 transition-colors cursor-pointer"><Copy size={14} /></button>
                 </div>
-                <button onClick={() => setTinderState('playing')} className="w-full bg-orange-500 text-white font-bold py-4 rounded-xl shadow-md">나도 투표 시작하기</button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto scrollbar-hide py-2 border-t border-b border-stone-100 mb-4">
+                <p className="text-[11px] font-bold text-stone-400 mb-3 text-left">현재 접속자 ({roomData.participants?.length || 0}명)</p>
+                <div className="flex flex-wrap gap-2">
+                  {roomData.participants?.map((p: string, i: number) => (
+                    <span key={i} className="bg-stone-50 text-stone-700 px-3 py-1.5 rounded-lg text-[11px] font-bold border border-stone-200 shadow-sm flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span> {p}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="shrink-0">
+                {isHost ? (
+                  /* 🌟 혼자일 경우 비활성화 되며 명확한 안내 문구 표시 */
+                  (roomData.participants?.length || 0) >= 2 ? (
+                    <button
+                      onClick={() => updateDoc(doc(db, "rooms", tinderRoomId!), { status: 'playing' })}
+                      className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black py-3.5 rounded-xl shadow-md transition-colors text-sm cursor-pointer"
+                    >
+                      🚀 {roomData.participants?.length}명 투표 시작하기
+                    </button>
+                  ) : (
+                    <button disabled className="w-full bg-stone-200 text-stone-400 font-black py-3.5 rounded-xl text-[13px] cursor-not-allowed">
+                      최소 2명 이상 참여해야 시작 가능합니다
+                    </button>
+                  )
+                ) : (
+                  <div className="bg-stone-50 p-3.5 rounded-xl">
+                    <p className="text-xs font-bold text-stone-500 flex items-center justify-center gap-2"><Loader2 className="animate-spin text-stone-400" size={14} /> 방장의 시작을 기다리는 중...</p>
+                  </div>
+                )}
               </div>
             </div>
           )}
 
           {tinderState === 'playing' && tinderItems.length > 0 && (
-            <div className="flex flex-col items-center justify-center w-full h-full px-4 relative">
-              <div className="absolute top-10 left-0 right-0 text-center flex flex-col items-center gap-2">
-                <span className="bg-white/10 text-stone-300 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest border border-white/20">Room: {tinderRoomId}</span>
-                <span className="bg-white/20 text-white text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-md">{currentTinderIndex + 1} / {tinderItems.length}</span>
+            <div className="bg-white rounded-[2rem] p-5 shadow-2xl relative w-full max-w-sm flex flex-col h-[600px] overflow-hidden animate-in zoom-in-95">
+              <div className="flex justify-between items-center mb-4 shrink-0 z-10">
+                <div className="flex gap-2 items-center">
+                  <span className="bg-stone-100 text-stone-500 text-[10px] font-black px-2.5 py-1 rounded-md uppercase tracking-widest border border-stone-200">Room: {tinderRoomId}</span>
+                  <span className="bg-orange-100 text-orange-600 text-[10px] font-black px-2.5 py-1 rounded-md">{currentTinderIndex + 1} / {tinderItems.length}</span>
+                </div>
+                <button onClick={closeTinderFlow} className="p-1.5 bg-stone-100 rounded-full text-stone-500 hover:bg-stone-200 cursor-pointer"><X size={16} /></button>
               </div>
 
-              <div className="relative w-full max-w-sm h-[400px] mt-8 perspective-[1000px]">
+              <div className="relative flex-1 w-full perspective-[1000px] mb-2">
                 {tinderItems.map((item: any, idx: number) => {
                   if (idx < currentTinderIndex) return null;
                   const isTop = idx === currentTinderIndex;
@@ -1319,192 +1118,348 @@ export default function Home() {
 
                   return (
                     <div
-                      key={idx}
-                      onTouchStart={isTop ? onTouchStart : undefined}
-                      onTouchMove={isTop ? onTouchMove : undefined}
-                      onTouchEnd={isTop ? onTouchEnd : undefined}
-                      className={`absolute inset-0 bg-white rounded-[2rem] shadow-2xl border border-stone-100 flex flex-col overflow-hidden origin-bottom ${isTop && swipeDirection === null && touchCurrentX === 0 ? 'transition-transform duration-300' : ''} ${swipeDirection !== null ? 'transition-transform duration-300 ease-in-out' : ''}`}
+                      key={idx} onTouchStart={isTop ? onTouchStart : undefined} onTouchMove={isTop ? onTouchMove : undefined} onTouchEnd={isTop ? onTouchEnd : undefined}
+                      className={`absolute inset-0 bg-white rounded-3xl shadow-xl border border-stone-200 flex flex-col overflow-hidden origin-bottom ${isTop && swipeDirection === null && touchCurrentX === 0 ? 'transition-transform duration-300' : ''} ${swipeDirection !== null ? 'transition-transform duration-300 ease-in-out' : ''}`}
                       style={{ zIndex, transform: transformStr }}
                     >
                       <div className={`w-full h-[55%] relative flex items-center justify-center shrink-0 ${item.type === 'menu' ? item.theme.bgColor : 'bg-stone-100'}`}>
-                        {item.type === 'menu' ? (
-                          <span className="text-8xl drop-shadow-md select-none">{item.theme.emoji}</span>
-                        ) : (
-                          item.data.imageUrls?.[0] ? <img src={item.data.imageUrls[0]} className="absolute inset-0 w-full h-full object-cover pointer-events-none" /> : <UtensilsCrossed size={48} className="text-stone-300" />
-                        )}
+                        {item.type === 'menu' ? <span className="text-8xl drop-shadow-md select-none">{item.theme.emoji}</span> : (item.data.imageUrls?.[0] ? <img src={item.data.imageUrls[0]} className="absolute inset-0 w-full h-full object-cover pointer-events-none" /> : <UtensilsCrossed size={48} className="text-stone-300" />)}
                       </div>
-                      <div className="w-full h-[45%] p-6 bg-white flex flex-col justify-center border-t border-stone-100">
+                      <div className="w-full h-[45%] p-5 bg-white flex flex-col justify-center border-t border-stone-100">
                         {item.type === 'menu' ? (
                           <div className="text-center">
                             <span className={`text-[10px] font-extrabold ${item.theme.bgColor} ${item.theme.textColor} px-2.5 py-1 rounded-full`}>{item.category}</span>
-                            <h3 className="text-3xl font-black text-stone-800 mt-3 tracking-tight">{item.name}</h3>
+                            <h3 className="text-2xl font-black text-stone-800 mt-2 tracking-tight">{item.name}</h3>
                           </div>
                         ) : (
                           <div>
                             <div className="flex items-center gap-2 mb-1.5"><span className="text-[10px] font-bold bg-stone-100 text-stone-500 px-2 py-0.5 rounded">{item.data.category}</span><div className="flex items-center text-[10px] font-bold text-amber-500"><Star size={10} className="fill-amber-500 mr-0.5" />{item.data.rating}.0</div></div>
-                            <h3 className="text-2xl font-black text-stone-800 truncate mb-1">{item.data.storeName}</h3>
-                            <p className="text-orange-500 text-sm font-bold truncate">{item.data.menu}</p>
-                            <p className="text-xs text-stone-400 mt-2 italic truncate break-keep line-clamp-2">"{item.data.comment}"</p>
+                            <h3 className="text-xl font-black text-stone-800 truncate mb-1">{item.data.storeName}</h3>
+                            <p className="text-orange-500 text-xs font-bold truncate">{item.data.menu}</p>
+                            <p className="text-[11px] text-stone-400 mt-2 italic truncate break-keep line-clamp-2">"{item.data.comment}"</p>
                           </div>
                         )}
                       </div>
-                      {isTop && touchCurrentX > 50 && <div className="absolute top-8 left-8 border-4 border-green-500 text-green-500 font-black text-4xl p-2 rounded-xl transform -rotate-12 opacity-80 pointer-events-none z-10">LIKE</div>}
-                      {isTop && touchCurrentX < -50 && <div className="absolute top-8 right-8 border-4 border-rose-500 text-rose-500 font-black text-4xl p-2 rounded-xl transform rotate-12 opacity-80 pointer-events-none z-10">NOPE</div>}
+                      {isTop && touchCurrentX > 50 && <div className="absolute top-6 left-6 border-4 border-green-500 text-green-500 font-black text-2xl p-1.5 rounded-lg transform -rotate-12 opacity-80 pointer-events-none z-10">LIKE</div>}
+                      {isTop && touchCurrentX < -50 && <div className="absolute top-6 right-6 border-4 border-rose-500 text-rose-500 font-black text-2xl p-1.5 rounded-lg transform rotate-12 opacity-80 pointer-events-none z-10">NOPE</div>}
                     </div>
                   );
                 })}
               </div>
-
-              <div className="flex items-center justify-center gap-8 mt-12 w-full max-w-sm">
-                <button onClick={() => handleSwipe('left')} className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(244,63,94,0.3)] text-rose-500 transform active:scale-90 transition-transform cursor-pointer"><X size={32} strokeWidth={3} /></button>
-                <button onClick={() => handleSwipe('right')} className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(34,197,94,0.3)] text-green-500 transform active:scale-90 transition-transform cursor-pointer"><Heart size={32} strokeWidth={3} className="fill-green-500" /></button>
+              <div className="flex items-center justify-center gap-6 shrink-0 z-10 py-2">
+                <button onClick={() => handleSwipe('left')} className="w-14 h-14 bg-white border border-stone-200 rounded-full flex items-center justify-center shadow-md text-rose-500 transform active:scale-90 transition-transform cursor-pointer"><X size={24} strokeWidth={3} /></button>
+                <button onClick={() => handleSwipe('right')} className="w-14 h-14 bg-white border border-stone-200 rounded-full flex items-center justify-center shadow-md text-green-500 transform active:scale-90 transition-transform cursor-pointer"><Heart size={24} strokeWidth={3} className="fill-green-500" /></button>
               </div>
             </div>
           )}
 
           {tinderState === 'leaderboard' && (
-            <div className="w-full max-w-sm px-6 text-center animate-in slide-in-from-bottom-10 duration-500 flex flex-col h-[85vh]">
-              <div className="flex items-center justify-center gap-2 mb-6 shrink-0">
-                <Activity size={24} className="text-rose-500 animate-pulse" />
-                <h2 className="text-2xl font-black text-white tracking-tight">실시간 투표 현황</h2>
+            <div className="bg-white rounded-[2rem] p-6 shadow-2xl relative w-full max-w-sm flex flex-col h-[600px] overflow-hidden animate-in zoom-in-95 text-left">
+              <button onClick={closeTinderFlow} className="absolute top-5 right-5 p-1.5 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 transition-colors z-50 cursor-pointer"><X size={18} /></button>
+
+              <div className="shrink-0 mt-2 border-b border-stone-100 pb-4 mb-4">
+                <h2 className="text-xl font-black text-stone-800 flex items-center gap-2"><Activity size={20} className="text-rose-500" /> 실시간 투표 현황</h2>
+                <p className="text-[10px] text-stone-400 mt-1">
+                  {roomData?.status === 'closed' ? "최종 1위를 직접 클릭 후 맛집을 찾으세요!" : "친구들의 투표를 실시간으로 확인하세요."}
+                </p>
               </div>
 
-              <div className="bg-white rounded-[2rem] p-5 shadow-2xl relative overflow-hidden text-left flex-1 min-h-0 flex flex-col">
-                <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-rose-500 to-orange-500" />
+              {roomLeaderboard.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center py-10">
+                  {roomData?.status === 'closed' ? (
+                    <>
+                      <span className="text-5xl mb-3">🥲</span>
+                      <p className="text-xs font-bold text-stone-500 text-center break-keep">아무도 좋아요를 누르지 않았어요.<br />투표가 마감되었습니다.</p>
+                    </>
+                  ) : (
+                    <>
+                      <Loader2 size={28} className="animate-spin text-stone-300 mb-3" />
+                      <p className="text-xs font-bold text-stone-500">투표 데이터를 불러오고 있어요...</p>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2.5 flex-1 overflow-y-auto scrollbar-hide pb-2">
+                  {roomLeaderboard.map((result: any, idx: number) => {
+                    const item = result.item;
+                    const isSelectable = roomData?.status === 'closed' && result.count > 0;
+                    const isSelected = tinderFinalPick === idx;
+                    const isFirst = idx === 0 && result.count > 0;
 
-                {roomLeaderboard.length === 0 ? (
-                  <div className="flex-1 flex flex-col items-center justify-center py-10">
-                    <Loader2 size={32} className="animate-spin text-stone-300 mb-4" />
-                    <p className="text-sm font-bold text-stone-500">투표 데이터를 불러오고 있어요...</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3 flex-1 overflow-y-auto scrollbar-hide my-2 pb-4">
-                    {roomLeaderboard.map((result: any, idx: number) => {
-                      const item = result.item;
-                      const isFirst = idx === 0 && result.count > 0;
-                      return (
-                        <div key={idx} className={`flex items-center gap-3 p-3 rounded-2xl border ${isFirst ? 'bg-orange-50 border-orange-500 shadow-md' : 'bg-stone-50 border-stone-100'}`}>
-                          <div className="w-6 text-center font-black text-stone-400 shrink-0">{idx + 1}</div>
-                          {item.type === 'menu' ? (
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl shrink-0 ${item.theme.bgColor}`}>{item.theme.emoji}</div>
-                          ) : (
-                            <div className="w-12 h-12 rounded-xl bg-stone-200 overflow-hidden shrink-0">
-                              {item.data.imageUrls?.[0] ? <img src={item.data.imageUrls[0]} className="w-full h-full object-cover" /> : <UtensilsCrossed className="w-full h-full p-3 text-stone-400" />}
-                            </div>
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <h4 className={`font-black truncate text-sm ${isFirst ? 'text-orange-600' : 'text-stone-800'}`}>{item.type === 'menu' ? item.name : item.data.storeName}</h4>
-                            <p className="text-[10px] text-stone-500 truncate">{item.type === 'menu' ? item.category : item.data.menu}</p>
-                          </div>
-                          <div className="shrink-0 flex items-center gap-1 bg-white px-2.5 py-1 rounded-lg border border-stone-200 shadow-sm">
-                            <Heart size={12} className={isFirst ? "text-rose-500 fill-rose-500" : "text-stone-400 fill-stone-400"} />
-                            <span className={`font-black text-sm ${isFirst ? 'text-rose-600' : 'text-stone-600'}`}>{result.count}</span>
-                          </div>
+                    return (
+                      <div
+                        key={idx}
+                        onClick={() => { if (isSelectable) setTinderFinalPick(idx); }}
+                        className={`flex items-center gap-3 p-3 rounded-2xl border transition-all ${isSelectable && isSelected ? 'bg-orange-50 border-orange-500 shadow-md ring-2 ring-orange-200 cursor-pointer'
+                          : isSelectable ? 'bg-white border-stone-200 cursor-pointer hover:border-orange-300'
+                            : isFirst ? 'bg-orange-50 border-orange-500 shadow-md'
+                              : 'bg-white border-stone-200'
+                          }`}
+                      >
+                        <div className="w-5 text-center font-black text-stone-400 text-xs shrink-0">{idx + 1}</div>
+                        {item.type === 'menu' ? <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 ${item.theme.bgColor}`}>{item.theme.emoji}</div> : <div className="w-10 h-10 rounded-xl bg-stone-200 overflow-hidden shrink-0">{item.data.imageUrls?.[0] ? <img src={item.data.imageUrls[0]} className="w-full h-full object-cover" /> : <UtensilsCrossed className="w-full h-full p-2 text-stone-400" />}</div>}
+                        <div className="min-w-0 flex-1">
+                          <h4 className={`font-black truncate text-sm ${(isSelectable && isSelected) || (!isSelectable && isFirst) ? 'text-orange-600' : 'text-stone-800'}`}>{item.type === 'menu' ? item.name : item.data.storeName}</h4>
+                          <p className="text-[10px] text-stone-500 truncate">{item.type === 'menu' ? item.category : item.data.menu}</p>
                         </div>
-                      )
-                    })}
-                  </div>
-                )}
+                        <div className="shrink-0 flex items-center gap-1 bg-white px-2 py-1 rounded-md border border-stone-200 shadow-sm"><Heart size={10} className={isFirst ? "text-rose-500 fill-rose-500" : "text-stone-400 fill-stone-400"} /><span className={`font-black text-[11px] ${isFirst ? 'text-rose-600' : 'text-stone-600'}`}>{result.count}</span></div>
+                        {isSelectable && isSelected && <Check size={16} className="text-orange-500 shrink-0 ml-1" />}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
 
-                {roomLeaderboard.length > 0 && roomLeaderboard[0].count > 0 ? (
-                  <button
-                    onClick={() => {
-                      const winner = roomLeaderboard[0].item;
-                      if (tinderMode === 'menu') {
-                        setTinderState('final_menu');
-                        executeSearch(winner.name);
-                      } else {
-                        setTinderState('idle');
-                        setShareReview(winner.data);
-                        setReceiptImageIndex(0);
-                      }
-                    }}
-                    className="w-full shrink-0 bg-stone-900 hover:bg-black text-white font-black py-4 rounded-xl shadow-lg active:scale-95 transition-transform"
-                  >
-                    {tinderMode === 'menu' ? '🏆 1위 메뉴로 주변 맛집 찾기' : '🏆 1위 식당 영수증 공유하기'}
-                  </button>
+              <div className="shrink-0 pt-4 border-t border-stone-100 mt-2">
+                {roomData?.status === 'closed' ? (
+                  roomLeaderboard.length > 0 && roomLeaderboard[0].count > 0 ? (
+                    <button
+                      onClick={() => {
+                        const winner = roomLeaderboard[tinderFinalPick].item;
+                        if (tinderMode === 'menu') {
+                          setTinderState('final_menu'); executeSearchWithRoomLocation(winner.name);
+                        } else {
+                          closeTinderFlow(); setShareReview(winner.data); setReceiptImageIndex(0);
+                        }
+                      }}
+                      className="w-full bg-stone-900 hover:bg-black text-white font-black py-3.5 rounded-xl shadow-lg active:scale-95 transition-transform text-sm cursor-pointer"
+                    >
+                      {tinderMode === 'menu' ? '📍 선택된 메뉴로 맛집 찾기' : '🏆 선택된 식당 영수증 띄우기'}
+                    </button>
+                  ) : <button onClick={closeTinderFlow} className="w-full bg-stone-100 text-stone-600 font-bold py-3.5 rounded-xl text-sm transition-colors hover:bg-stone-200 cursor-pointer">닫기 (결과 없음)</button>
                 ) : (
-                  <button onClick={() => setTinderState('idle')} className="w-full shrink-0 bg-stone-100 hover:bg-stone-200 text-stone-500 font-black py-4 rounded-xl transition-colors">
-                    돌아가기
-                  </button>
+                  isHost ? (
+                    <button onClick={() => updateDoc(doc(db, "rooms", tinderRoomId!), { status: 'closed' })} className="w-full bg-rose-500 hover:bg-rose-600 text-white font-black py-3.5 rounded-xl shadow-md transition-colors text-sm cursor-pointer">
+                      투표 마감하기 (결과 확정)
+                    </button>
+                  ) : (
+                    <div className="text-center p-3.5 bg-stone-50 rounded-xl"><p className="text-[11px] font-bold text-stone-500 animate-pulse">방장이 투표를 마감할 때까지 기다려주세요...</p></div>
+                  )
                 )}
               </div>
             </div>
           )}
 
           {tinderState === 'final_menu' && (
-            <div className="w-full max-w-sm px-6 animate-in zoom-in-95 duration-500 h-[80vh] flex flex-col">
-              <div className="flex items-center justify-between mb-4 shrink-0">
-                <h2 className="text-2xl font-black text-white tracking-tight">주변 맛집 추천</h2>
+            <div className="bg-white rounded-[2rem] p-6 shadow-2xl relative w-full max-w-sm flex flex-col h-[600px] overflow-hidden animate-in zoom-in-95 text-left">
+              <div className="flex items-center justify-between mb-4 shrink-0 border-b border-stone-100 pb-3">
+                <h2 className="text-xl font-black text-stone-800 tracking-tight">주변 맛집 추천</h2>
+              </div>
+              <button onClick={closeTinderFlow} className="absolute top-5 right-5 p-1.5 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 transition-colors z-50 cursor-pointer"><X size={18} /></button>
+
+              <div className="flex items-center gap-3 bg-orange-50 p-3 rounded-xl mb-4 shrink-0 border border-orange-100 mt-2">
+                <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center text-xl shadow-sm">{safeIconTheme.emoji}</div>
+                <div><p className="text-[10px] font-bold text-orange-500">투표 1위 메뉴</p><p className="text-lg font-black text-stone-800 leading-tight">{recommendedMenu}</p></div>
               </div>
 
-              <div className="bg-white rounded-[2rem] p-5 shadow-2xl relative overflow-hidden flex flex-col flex-1 min-h-0 text-left">
-                <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-orange-400 to-rose-400" />
-
-                <div className="flex items-center gap-3 bg-orange-50 p-3 rounded-xl mb-4 shrink-0 border border-orange-100">
-                  <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center text-xl shadow-sm">
-                    {safeIconTheme.emoji}
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-orange-500">투표 1위 메뉴</p>
-                    <p className="text-lg font-black text-stone-800 leading-tight">{recommendedMenu}</p>
-                  </div>
-                </div>
-
-                <div className="flex-1 overflow-y-auto scrollbar-hide space-y-2 pb-4">
-                  {isLocating ? (
-                    <div className="h-full flex flex-col items-center justify-center gap-3">
-                      <Loader2 className="animate-spin text-orange-500" size={24} />
-                      <p className="text-xs font-bold text-stone-500">맛집을 찾고 있어요...</p>
-                    </div>
-                  ) : locationError ? (
-                    <div className="h-full flex items-center justify-center"><p className="text-xs text-red-500 font-bold bg-red-50 p-3 rounded-xl">{locationError}</p></div>
-                  ) : nearbyExternal.length === 0 && nearbySaved.length === 0 ? (
-                    <div className="h-full flex items-center justify-center"><p className="text-xs font-bold text-stone-400">주변에 검색된 맛집이 없습니다 🥲</p></div>
-                  ) : (
-                    <>
-                      {nearbySaved.map((r: Review) => (
-                        <div key={r.id} className="flex items-center justify-between bg-orange-50 border border-orange-100 p-3 rounded-xl">
-                          <div className="flex items-center gap-3 min-w-0">{r.imageUrls?.[0] && <img src={r.imageUrls[0]} className="w-10 h-10 rounded-lg object-cover" />}<div className="min-w-0"><p className="text-sm font-bold truncate text-orange-900">{r.storeName}</p><p className="text-[10px] text-orange-600">단골 맛집</p></div></div>
-                          <div className="flex items-center gap-1 shrink-0"><Star size={11} className="text-amber-500 fill-amber-500" /><span className="text-xs font-bold text-amber-600">{r.rating}.0</span></div>
+              <div className="flex-1 overflow-y-auto scrollbar-hide space-y-2 pb-4">
+                {isLocating ? (
+                  <div className="h-full flex flex-col items-center justify-center gap-3"><Loader2 className="animate-spin text-orange-500" size={24} /><p className="text-xs font-bold text-stone-500">방장의 위치를 기준으로 맛집을 찾고 있어요...</p></div>
+                ) : locationError ? (
+                  <div className="h-full flex items-center justify-center"><p className="text-xs text-red-500 font-bold bg-red-50 p-3 rounded-xl">{locationError}</p></div>
+                ) : nearbyExternal.length === 0 && nearbySaved.length === 0 ? (
+                  <div className="h-full flex items-center justify-center"><p className="text-xs font-bold text-stone-400">검색된 맛집이 없습니다 🥲</p></div>
+                ) : (
+                  <>
+                    {nearbySaved.map((r: Review) => (
+                      <div key={r.id} className="flex items-center justify-between bg-orange-50 border border-orange-100 p-3 rounded-xl">
+                        <div className="flex items-center gap-3 min-w-0">{r.imageUrls?.[0] && <img src={r.imageUrls[0]} className="w-10 h-10 rounded-lg object-cover" />}<div className="min-w-0"><p className="text-sm font-bold truncate text-orange-900">{r.storeName}</p><p className="text-[10px] text-orange-600">단골 맛집</p></div></div>
+                        <div className="flex items-center gap-1 shrink-0"><Star size={11} className="text-amber-500 fill-amber-500" /><span className="text-xs font-bold text-amber-600">{r.rating}.0</span></div>
+                      </div>
+                    ))}
+                    {nearbyExternal.map((p: any, i: number) => (
+                      <div key={i} className="flex items-center justify-between bg-white border border-stone-200 rounded-xl px-3 py-3 shadow-sm group">
+                        <a href={p.place_url} target="_blank" className="flex flex-col min-w-0 flex-1 cursor-pointer pr-2">
+                          <span className="font-bold text-stone-800 text-sm truncate group-hover:text-stone-900 transition-colors">{p.place_name}</span>
+                          <span className="text-[10px] text-stone-400 truncate mt-0.5">{p.address_name}</span>
+                        </a>
+                        <div className="flex flex-col items-end shrink-0 gap-1.5 ml-2">
+                          <span className="text-[10px] font-extrabold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">{p.distance}m</span>
+                          <button onClick={() => handleScrapPlace(p)} className="text-[10px] font-bold bg-stone-100 text-stone-600 px-3 py-1.5 rounded-lg hover:bg-orange-500 hover:text-white transition-colors cursor-pointer">+ 저장</button>
                         </div>
-                      ))}
-                      {nearbyExternal.map((p: any, i: number) => (
-                        <div key={i} className="flex items-center justify-between bg-white border border-stone-200 rounded-xl px-3 py-3 shadow-sm group">
-                          <a href={p.place_url} target="_blank" className="flex flex-col min-w-0 flex-1 cursor-pointer pr-2">
-                            <span className="font-bold text-stone-800 text-sm truncate group-hover:text-stone-900 transition-colors">{p.place_name}</span>
-                            <span className="text-[10px] text-stone-400 truncate mt-0.5">{p.address_name}</span>
-                          </a>
-                          <div className="flex flex-col items-end shrink-0 gap-1.5 ml-2">
-                            <span className="text-[10px] font-extrabold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">{p.distance}m</span>
-                            <button onClick={() => handleScrapPlace(p)} className="text-[10px] font-bold bg-stone-100 text-stone-600 px-3 py-1.5 rounded-lg hover:bg-orange-500 hover:text-white transition-colors cursor-pointer">+ 저장</button>
-                          </div>
-                        </div>
-                      ))}
-                    </>
-                  )}
-                </div>
-                <button onClick={() => setTinderState('idle')} className="w-full shrink-0 bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold py-3.5 rounded-xl transition-colors mt-2">닫기</button>
+                      </div>
+                    ))}
+                  </>
+                )}
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* 📸 영수증 공유 모달 */}
+      {/* ========================================================================= */}
+      {/* 4. 기타 보조 모달 창들 (프로필, 친구, 영수증, 리뷰) - z-250 */}
+      {/* ========================================================================= */}
+
+      {isProfileModalOpen && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsProfileModalOpen(false)} />
+          <div className="relative bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in-95">
+            <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-black flex items-center gap-2"><Settings className="text-orange-500" /> 내 프로필 설정</h3><button onClick={() => setIsProfileModalOpen(false)} className="p-1.5 rounded-full bg-stone-100 text-stone-500 cursor-pointer"><X size={18} /></button></div>
+            <form onSubmit={handleSaveProfile} className="space-y-6">
+              <div className="flex flex-col items-center gap-3">
+                <div className="relative">
+                  <div className="w-24 h-24 rounded-full border-2 border-orange-200 bg-orange-50 overflow-hidden flex items-center justify-center">{profilePhotoUrl ? <img src={profilePhotoUrl} className="w-full h-full object-cover" /> : <User size={40} className="text-orange-300" />}</div>
+                  <label className="absolute bottom-0 right-0 bg-white p-2 rounded-full shadow-md border border-stone-200 cursor-pointer hover:bg-stone-50 transition-colors"><Camera size={16} className="text-stone-600" /><input type="file" accept="image/*" className="hidden" onChange={handleProfileImageSelect} /></label>
+                </div>
+                <p className="text-[10px] text-stone-400">사진을 터치해 변경하세요</p>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-stone-500 mb-2 uppercase tracking-wider ml-1">나의 닉네임</label>
+                <input type="text" value={profileNickname} onChange={(e) => setProfileNickname(e.target.value)} required placeholder="닉네임을 입력하세요 (예: 맛잘알 지훈)" maxLength={10} className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-orange-500 outline-none transition-all" />
+              </div>
+              <button type="submit" disabled={isSavingProfile} className="w-full bg-stone-800 hover:bg-black text-white font-black py-4 rounded-xl shadow-lg active:scale-95 transition-all disabled:opacity-50 cursor-pointer">{isSavingProfile ? <Loader2 className="animate-spin mx-auto" /> : "프로필 저장하기"}</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isSyncModalOpen && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsSyncModalOpen(false)} />
+          <div className="relative bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center mb-4 shrink-0"><h3 className="text-xl font-black flex items-center gap-2"><MapPin className="text-blue-500" fill="#E0F2FE" /> 공유 지도 만들기</h3><button onClick={() => setIsSyncModalOpen(false)} className="p-1.5 rounded-full bg-stone-100 text-stone-500 cursor-pointer"><X size={18} /></button></div>
+            <div className="overflow-y-auto scrollbar-hide space-y-6 pb-2">
+              <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 text-center"><p className="text-[13px] font-bold text-blue-800 leading-relaxed">서로의 코드를 입력하면<br />맛집 지도가 하나로 합쳐져요! 🗺️✨</p></div>
+              <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100">
+                <p className="text-[11px] font-bold text-stone-400 mb-2 uppercase tracking-wider">나의 연결 코드</p>
+                <div className="flex items-center justify-between">
+                  <code className="text-sm font-black text-blue-600 tracking-widest bg-white px-2 py-1 rounded shadow-sm border border-stone-100">{user?.uid?.substring(0, 15)}...</code>
+                  <button onClick={() => { navigator.clipboard.writeText(user?.uid || ""); alert("내 코드가 복사되었습니다!"); }} className="p-2 bg-white rounded-lg shadow-sm text-stone-400 hover:text-blue-500 cursor-pointer"><Copy size={16} /></button>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">친구 코드 입력</p>
+                <input type="text" value={partnerCode} onChange={(e) => setPartnerCode(e.target.value)} placeholder="친구의 코드를 붙여넣기 하세요" className="w-full bg-white border border-stone-200 rounded-xl py-4 px-4 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm" />
+                <button onClick={handleConnectPartner} disabled={isConnecting || !partnerCode} className="w-full bg-blue-500 hover:bg-blue-600 text-white font-black py-3.5 rounded-xl shadow-md active:scale-95 transition-all disabled:opacity-50 cursor-pointer">{isConnecting ? <Loader2 className="animate-spin mx-auto" /> : "연결 신청하기"}</button>
+              </div>
+              {partnerUids.length > 0 && (
+                <div className="pt-4 border-t border-stone-100">
+                  <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1 mb-3">현재 연결된 친구들</p>
+                  <div className="space-y-2">
+                    {partnerUids.map(uid => {
+                      const p = partnersData[uid];
+                      return (
+                        <div key={uid} className="flex items-center justify-between bg-white border border-stone-100 p-3 rounded-xl shadow-sm">
+                          <div className="flex items-center gap-3">{p?.photoUrl ? <img src={p.photoUrl} className="w-8 h-8 rounded-full object-cover" /> : <div className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-400"><User size={14} /></div>}<span className="font-bold text-sm text-stone-700">{p?.nickname || "친구"}</span></div>
+                          <button onClick={() => handleDisconnect(uid, p?.nickname || "친구")} className="text-[10px] font-bold bg-red-50 text-red-500 hover:bg-red-100 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"><UserMinus size={12} /> 연결 끊기</button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isBadgeModalOpen && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4" onClick={() => setIsBadgeModalOpen(false)}>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          <div className="relative bg-white w-full max-w-sm rounded-3xl p-5 shadow-2xl max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4 shrink-0"><h3 className="text-xl font-black flex items-center gap-2"><Star className="text-orange-500 fill-orange-500" size={20} /> 내 뱃지 도감</h3><button onClick={() => setIsBadgeModalOpen(false)} className="p-1.5 rounded-full bg-stone-100 cursor-pointer"><X size={18} /></button></div>
+            {isLoadingBadges ? <div className="py-20 flex justify-center"><Loader2 className="animate-spin text-orange-500" size={32} /></div> : (
+              <>
+                <div className="bg-orange-50 border border-orange-100 rounded-2xl p-4 mb-3 flex items-center justify-between shrink-0">
+                  <div><p className="text-xs font-bold text-orange-600 mb-0.5">나의 수집 진행도</p><p className="text-sm font-black text-stone-800"><span className="text-orange-500 text-xl">{totalCollectedBadges}</span> / {totalBadgesCount}개</p></div>
+                  <div className="text-right"><p className="text-[11px] text-stone-500 font-medium">Locked</p><p className="text-sm font-bold text-stone-700">🔒 {lockedBadgesCount}개</p></div>
+                </div>
+                <div className="flex border-b border-stone-100 mb-4 shrink-0">
+                  <button onClick={() => setBadgeTab("general")} className={`flex-1 pb-2 font-bold text-sm border-b-2 ${badgeTab === "general" ? "border-orange-500 text-orange-500" : "border-transparent text-stone-400"} cursor-pointer`}>🏆 미식가 등급</button>
+                  <button onClick={() => setBadgeTab("category")} className={`flex-1 pb-2 font-bold text-sm border-b-2 ${badgeTab === "category" ? "border-orange-500 text-orange-500" : "border-transparent text-stone-400"} cursor-pointer`}>🏷️ 카테고리 뱃지</button>
+                </div>
+                <div className="overflow-y-auto scrollbar-hide flex-1 pb-4 space-y-3">
+                  {badgeTab === "general" ? GENERAL_BADGES.map((b, i) => {
+                    const isUnlocked = badgeStats.total >= b.threshold;
+                    const isSelected = displayBadge.title === b.title;
+                    return (
+                      <div key={i} onClick={() => isUnlocked && handleSelectBadge(b, 'general')} className={`flex items-center gap-4 p-3 rounded-2xl border ${isUnlocked ? (isSelected ? 'border-orange-500 bg-orange-50 ring-2 ring-orange-200' : `${b.bg} cursor-pointer`) : 'bg-stone-50 border-stone-100 grayscale opacity-40'}`}>
+                        <div className="text-3xl shrink-0 w-12 text-center">{isUnlocked ? b.icon : "🔒"}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-center mb-0.5"><span className={`font-black text-sm ${isUnlocked ? b.color : 'text-stone-500'}`}>{b.title}</span>{isUnlocked && isSelected && <Check size={16} className="text-orange-500" />}</div>
+                          <p className="text-[11px] text-stone-500 truncate">{b.desc}</p>
+                          <p className="text-[10px] font-bold text-stone-400 mt-1 bg-stone-100 inline-block px-1.5 py-0.5 rounded">목표: 총 {b.threshold}곳 저장</p>
+                        </div>
+                      </div>
+                    );
+                  }) : Object.entries(CATEGORY_BADGES).map(([cat, badges]) => (
+                    <div key={cat}>
+                      <h4 className="font-extrabold text-stone-700 mb-3 flex justify-between border-b border-stone-100 pb-2"><span>{cat} 영역</span><span className="text-xs bg-stone-100 text-stone-500 px-2 py-1 rounded-lg">누적 {badgeStats.categories[cat] || 0}곳</span></h4>
+                      <div className="grid gap-2">
+                        {badges.map((b: any) => {
+                          const isUnlocked = (badgeStats.categories[cat] || 0) >= b.threshold;
+                          const isSelected = displayBadge.title === b.title;
+                          return (
+                            <div key={b.title} onClick={() => isUnlocked && handleSelectBadge(b, 'category')} className={`flex items-center gap-3 p-3 rounded-2xl border ${isUnlocked ? (isSelected ? 'border-orange-500 bg-orange-50 ring-2 ring-orange-200' : 'bg-white border-orange-100 cursor-pointer') : 'bg-stone-50 border-stone-100 grayscale opacity-40'}`}>
+                              <div className="text-2xl shrink-0 w-10 text-center">{isUnlocked ? b.icon : "🔒"}</div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex justify-between items-center mb-0.5"><span className="font-bold text-sm text-stone-800">{b.title}</span>{isUnlocked && isSelected && <Check size={16} className="text-orange-500" />}</div>
+                                <p className="text-[11px] text-stone-500 truncate">{b.desc}</p>
+                                <p className="text-[10px] font-bold text-stone-400 mt-1 bg-stone-100 inline-block px-1.5 py-0.5 rounded">목표: {cat} {b.threshold}곳 저장</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {isAuthModalOpen && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div className="relative bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in-95">
+            <div className="flex justify-end mb-2"><button onClick={() => { setIsAuthModalOpen(false); setAuthError(""); setResetMessage(""); }} className="p-1.5 rounded-full bg-stone-100 cursor-pointer"><X size={18} /></button></div>
+            {authMode === "reset" ? (
+              <>
+                <div className="text-center mb-6"><div className="inline-flex bg-orange-100 p-3 rounded-full text-orange-500 mb-3"><Lock size={28} /></div><h3 className="text-xl font-black mb-2">비밀번호 재설정</h3></div>
+                <form onSubmit={handlePasswordReset} className="space-y-4">
+                  <input type="email" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} required placeholder="이메일 주소" className="w-full py-3 px-4 bg-stone-50 rounded-xl border border-stone-200" />
+                  {authError && <p className="text-xs text-red-500 text-center">{authError}</p>}
+                  <button type="submit" className="w-full bg-orange-500 text-white font-bold py-3.5 rounded-xl cursor-pointer">재설정 메일 보내기</button>
+                  <button type="button" onClick={() => setAuthMode("login")} className="w-full text-sm font-bold text-stone-400 cursor-pointer">로그인으로 돌아가기</button>
+                </form>
+              </>
+            ) : (
+              <>
+                <div className="text-center mb-6"><div className="inline-flex bg-orange-100 p-3 rounded-full text-orange-500 mb-3"><ChefHat size={28} /></div><h3 className="text-xl font-black mb-2">나만의 맛집 지도 만들기</h3></div>
+                <div className="flex p-1 bg-stone-100 rounded-xl mb-6">
+                  <button onClick={() => setAuthMode("login")} className={`flex-1 py-2 text-sm font-bold rounded-lg cursor-pointer ${authMode === "login" ? "bg-white shadow-sm" : "text-stone-400"}`}>로그인</button>
+                  <button onClick={() => setAuthMode("signup")} className={`flex-1 py-2 text-sm font-bold rounded-lg cursor-pointer ${authMode === "signup" ? "bg-white shadow-sm" : "text-stone-400"}`}>회원가입</button>
+                </div>
+                <form onSubmit={handleEmailAuth} className="space-y-4">
+                  <input type="email" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} required placeholder="이메일 주소" className="w-full py-3 px-4 bg-stone-50 rounded-xl border border-stone-200" />
+                  <input type={showPassword ? "text" : "password"} value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} required placeholder="비밀번호" className="w-full py-3 px-4 bg-stone-50 rounded-xl border border-stone-200" />
+                  {authError && <p className="text-xs text-red-500 text-center">{authError}</p>}
+                  <button type="submit" className="w-full bg-stone-800 text-white font-bold py-3.5 rounded-xl cursor-pointer">{authMode === "login" ? "로그인" : "가입하기"}</button>
+                </form>
+                <div className="relative my-6 flex items-center py-2"><div className="flex-grow border-t border-stone-200"></div><span className="mx-4 text-stone-400 text-xs">또는</span><div className="flex-grow border-t border-stone-200"></div></div>
+                <button onClick={handleGoogleLogin} className="w-full flex items-center justify-center gap-2 bg-white border border-stone-200 font-bold py-3.5 rounded-xl shadow-sm cursor-pointer">구글로 시작하기</button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {shareReview && (
-        <div className="fixed inset-0 z-[140] flex items-center justify-center p-0 sm:p-6" onClick={() => setShareReview(null)}>
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-0 sm:p-6" onClick={() => setShareReview(null)}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
           <div className="relative z-10 flex flex-col w-full h-full sm:h-auto sm:max-h-[90vh] max-w-md bg-[#FFFDF6] sm:rounded-[2rem] sm:border border-stone-200 shadow-2xl overflow-hidden animate-in zoom-in-95 sm:slide-in-from-bottom-0 slide-in-from-bottom-full duration-300" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center w-full p-5 shrink-0 bg-white border-b border-orange-50">
               <h3 className="text-lg font-bold text-stone-800 flex items-center gap-2"><Share2 size={18} className="text-orange-500" /> 맛집 공유하기</h3>
-              <button onClick={() => setShareReview(null)} className="p-1.5 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 transition-colors"><X size={18} /></button>
+              <button onClick={() => setShareReview(null)} className="p-1.5 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 transition-colors cursor-pointer"><X size={18} /></button>
             </div>
             <div className="flex-1 overflow-y-auto w-full px-4 pt-6 flex flex-col items-center pb-6 scrollbar-hide">
               {shareReview.imageUrls && shareReview.imageUrls.length > 1 && (
                 <div className="flex gap-2 mb-4 w-[300px] overflow-x-auto scrollbar-hide pb-2 shrink-0">
                   {shareReview.imageUrls.map((url: string, idx: number) => (
-                    <button key={idx} onClick={() => setReceiptImageIndex(idx)} className={`w-12 h-12 shrink-0 rounded-lg border-2 overflow-hidden ${idx === receiptImageIndex ? 'border-orange-500 shadow-md' : 'border-transparent opacity-50'}`}>
+                    <button key={idx} onClick={() => setReceiptImageIndex(idx)} className={`w-12 h-12 shrink-0 rounded-lg border-2 overflow-hidden ${idx === receiptImageIndex ? 'border-orange-500 shadow-md' : 'border-transparent opacity-50'} cursor-pointer`}>
                       <img src={url} crossOrigin="anonymous" className="w-full h-full object-cover" />
                     </button>
                   ))}
@@ -1536,10 +1491,10 @@ export default function Home() {
             </div>
             <div className="shrink-0 w-full p-4 bg-white border-t border-stone-100 pb-8 sm:pb-5">
               <div className="flex flex-col gap-2 w-full max-w-[300px] mx-auto">
-                <button onClick={handleKakaoShare} className="w-full bg-[#FEE500] hover:bg-[#FDD800] text-stone-900 font-black py-3.5 rounded-xl shadow-md flex items-center justify-center gap-2"><MessageCircle size={18} className="fill-stone-900" /> 카카오톡으로 공유하기</button>
+                <button onClick={handleKakaoShare} className="w-full bg-[#FEE500] hover:bg-[#FDD800] text-stone-900 font-black py-3.5 rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer"><MessageCircle size={18} className="fill-stone-900" /> 카카오톡으로 공유하기</button>
                 <div className="flex gap-2">
-                  <button onClick={handleDownloadReceipt} disabled={isGeneratingImage} className="flex-1 bg-stone-50 text-stone-800 text-sm font-bold py-3.5 rounded-xl shadow-sm border border-stone-200 flex items-center justify-center gap-2">{isGeneratingImage ? <Loader2 size={16} className="animate-spin text-orange-500" /> : <Download size={16} className="text-orange-500" />} 이미지 저장</button>
-                  <button onClick={handleCopyLink} className="flex-1 bg-stone-50 text-stone-800 text-sm font-bold py-3.5 rounded-xl shadow-sm border border-stone-200 flex items-center justify-center gap-2"><Copy size={16} className="text-blue-500" /> 링크 복사</button>
+                  <button onClick={handleDownloadReceipt} disabled={isGeneratingImage} className="flex-1 bg-stone-50 text-stone-800 text-sm font-bold py-3.5 rounded-xl shadow-sm border border-stone-200 flex items-center justify-center gap-2 cursor-pointer">{isGeneratingImage ? <Loader2 size={16} className="animate-spin text-orange-500" /> : <Download size={16} className="text-orange-500" />} 이미지 저장</button>
+                  <button onClick={handleCopyLink} className="flex-1 bg-stone-50 text-stone-800 text-sm font-bold py-3.5 rounded-xl shadow-sm border border-stone-200 flex items-center justify-center gap-2 cursor-pointer"><Copy size={16} className="text-blue-500" /> 링크 복사</button>
                 </div>
               </div>
             </div>
@@ -1548,12 +1503,12 @@ export default function Home() {
       )}
 
       {isScrapModalOpen && (
-        <div className="fixed inset-0 z-[140] flex items-end sm:items-center justify-center" onClick={() => setIsScrapModalOpen(false)}>
+        <div className="fixed inset-0 z-[250] flex items-end sm:items-center justify-center" onClick={() => setIsScrapModalOpen(false)}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
           <div className="relative bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 max-h-[90vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-lg font-bold text-stone-800 flex items-center gap-2">{pendingImport ? <Copy size={18} className="text-blue-500" /> : <MapPin size={18} className="text-orange-500" />}{pendingImport ? "친구 맛집 가져오기" : "맛집 저장하기"}</h3>
-              <button type="button" onClick={() => setIsScrapModalOpen(false)} className="p-1.5 rounded-full bg-stone-100"><X size={18} /></button>
+              <button type="button" onClick={() => setIsScrapModalOpen(false)} className="p-1.5 rounded-full bg-stone-100 cursor-pointer"><X size={18} /></button>
             </div>
             <form onSubmit={handleAddReview} className="space-y-4">
               <input type="text" value={storeName} onChange={(e) => setStoreName(e.target.value)} required placeholder="가게 이름" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 text-sm" />
@@ -1564,17 +1519,17 @@ export default function Home() {
               <CategorySelector value={category} onChange={setCategory} showCustom={showCustomCategory} onToggleCustom={() => setShowCustomCategory(!showCustomCategory)} customValue={customCategory} onCustomChange={setCustomCategory} availableCats={knownCategories} />
               <MultiImagePicker existingUrls={importedUrls} newPreviews={imagePreviews} onSelect={(e: any, t: number) => handleImagesSelect(e, t, setImageFiles, setImagePreviews)} onRemoveExisting={(idx: number) => setImportedUrls(p => p.filter((_, i) => i !== idx))} onRemoveNew={(idx: number) => { setImageFiles(p => p.filter((_, i) => i !== idx)); setImagePreviews(p => p.filter((_, i) => i !== idx)); }} />
               <textarea value={comment} onChange={(e) => setComment(e.target.value)} required placeholder="한줄평" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 h-24 resize-none text-sm" />
-              <button type="submit" disabled={isSubmitting} className="w-full bg-orange-500 text-white font-bold py-3.5 rounded-xl">{isSubmitting ? "저장 중..." : "리스트에 저장"}</button>
+              <button type="submit" disabled={isSubmitting} className="w-full bg-orange-500 text-white font-bold py-3.5 rounded-xl cursor-pointer">{isSubmitting ? "저장 중..." : "리스트에 저장"}</button>
             </form>
           </div>
         </div>
       )}
 
       {editingReview && (
-        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center" onClick={() => setEditingReview(null)}>
+        <div className="fixed inset-0 z-[250] flex items-end sm:items-center justify-center" onClick={() => setEditingReview(null)}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
           <div className="relative bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 max-h-[90vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5"><h3 className="text-lg font-bold text-stone-800 flex items-center gap-2"><Pencil size={18} className="text-orange-500" /> 맛집 수정</h3><button onClick={() => setEditingReview(null)} className="p-1.5 rounded-full bg-stone-100"><X size={18} /></button></div>
+            <div className="flex items-center justify-between mb-5"><h3 className="text-lg font-bold text-stone-800 flex items-center gap-2"><Pencil size={18} className="text-orange-500" /> 맛집 수정</h3><button onClick={() => setEditingReview(null)} className="p-1.5 rounded-full bg-stone-100 cursor-pointer"><X size={18} /></button></div>
             <form onSubmit={handleUpdateReview} className="space-y-4">
               <input type="text" value={editStoreName} onChange={(e) => setEditStoreName(e.target.value)} required className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 text-sm" />
               <div className="grid grid-cols-2 gap-4">
@@ -1584,15 +1539,15 @@ export default function Home() {
               <CategorySelector value={editCategory} onChange={setEditCategory} showCustom={editShowCustomCategory} onToggleCustom={() => setEditShowCustomCategory(!editShowCustomCategory)} customValue={editCustomCategory} onCustomChange={setCustomCategory} availableCats={knownCategories} />
               <MultiImagePicker existingUrls={editExistingUrls} newPreviews={editImagePreviews} onSelect={(e: any, t: number) => handleImagesSelect(e, t, setEditImageFiles, setEditImagePreviews)} onRemoveExisting={(idx: number) => setEditExistingUrls(p => p.filter((_, i) => i !== idx))} onRemoveNew={(idx: number) => { setEditImageFiles(p => p.filter((_, i) => i !== idx)); setEditImagePreviews(p => p.filter((_, i) => i !== idx)); }} />
               <textarea value={editComment} onChange={(e) => setEditComment(e.target.value)} required className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 h-24 resize-none text-sm" />
-              <button type="submit" disabled={isUpdating} className="w-full bg-orange-500 text-white font-bold py-3.5 rounded-xl">{isUpdating ? "저장 중..." : "수정 완료"}</button>
+              <button type="submit" disabled={isUpdating} className="w-full bg-orange-500 text-white font-bold py-3.5 rounded-xl cursor-pointer">{isUpdating ? "저장 중..." : "수정 완료"}</button>
             </form>
           </div>
         </div>
       )}
 
       {fullScreenData && (
-        <div className="fixed inset-0 z-[160] bg-black/95 flex items-center justify-center p-4" onClick={() => setFullScreenData(null)}>
-          <button className="absolute top-6 right-6 text-white p-2 rounded-full hover:bg-white/20"><X size={24} /></button>
+        <div className="fixed inset-0 z-[300] bg-black/95 flex items-center justify-center p-4" onClick={() => setFullScreenData(null)}>
+          <button className="absolute top-6 right-6 text-white p-2 rounded-full hover:bg-white/20 cursor-pointer"><X size={24} /></button>
           <img src={fullScreenData.urls[fullScreenData.currentIndex]} className="max-w-full max-h-[90vh] object-contain rounded-lg" />
         </div>
       )}
