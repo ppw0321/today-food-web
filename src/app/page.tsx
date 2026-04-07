@@ -121,7 +121,6 @@ interface Review {
 
 export default function Home() {
 
-  // 🌟 (버그수정) 카카오톡 인앱 브라우저 강제 탈출 (로그인 세션 유지용)
   if (typeof window !== "undefined") {
     const userAgent = navigator.userAgent.toLowerCase();
     if (userAgent.includes("kakaotalk")) {
@@ -218,14 +217,14 @@ export default function Home() {
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [activeBadge, setActiveBadge] = useState<{ icon: string, title: string, color: string, bg: string } | null>(null);
 
-  // 🌟 Phase 2.3 틴더 상태 (winner_reveal 추가)
+  // 🌟 Phase 2.3 틴더 상태
   const [tinderState, setTinderState] = useState<'idle' | 'setup' | 'share_room' | 'playing' | 'leaderboard' | 'winner_reveal' | 'final_menu'>('idle');
   const [tinderRoomId, setTinderRoomId] = useState<string | null>(null);
   const [tinderMode, setTinderMode] = useState<'menu' | 'restaurant'>('menu');
   const [tinderItems, setTinderItems] = useState<any[]>([]);
   const [currentTinderIndex, setCurrentTinderIndex] = useState(0);
   const [likedTinderItems, setLikedTinderItems] = useState<any[]>([]);
-  // 🌟 (버그수정) 룸 리더보드는 useMemo로 파생데이터로 변경 (동기화 꼬임 방지)
+
   const [roomData, setRoomData] = useState<any>(null);
   const [hasVoted, setHasVoted] = useState(false);
   const [guestId, setGuestId] = useState("");
@@ -246,7 +245,7 @@ export default function Home() {
     });
   }, [reviews, showGroupRecords, selectedAuthorFilter, user]);
 
-  // 🌟 리더보드 계산을 state가 아닌 파생 데이터로 통합
+  // 🌟 리더보드 계산 (동기화 꼬임 방지)
   const roomLeaderboard = useMemo(() => {
     if (!roomData || !tinderItems.length) return [];
     const counts: Record<string, number> = {};
@@ -288,7 +287,7 @@ export default function Home() {
   const myName = user ? profileNickname : guestId;
   const isHost = roomData?.hostUid === myId;
 
-  // 🌟 (버그 수정) 틴더 클린 종료 함수 (모든 상태 백지화)
+  // 🌟 (버그 수정 3) 투표 로직 완전 초기화 함수 (배경까지 깔끔하게)
   const closeTinderFlow = () => {
     setTinderState('idle');
     setTinderRoomId(null);
@@ -322,7 +321,6 @@ export default function Home() {
     return () => unsubscribe();
   }, []);
 
-  // 🌟 (버그 수정 1) URL 파라미터 감지 후 단 한번만 방 입장 처리
   useEffect(() => {
     if (typeof window === "undefined" || authLoading || !myName) return;
 
@@ -361,18 +359,17 @@ export default function Home() {
         setTinderRoomId(roomId); setTinderMode(rData.mode); setTinderItems(rData.items || []);
         setCurrentTinderIndex(0); setLikedTinderItems([]); setTinderFinalPick(0);
 
-        // 🌟 내 투표 여부 확인 로직 (votes 맵 구조에 맞춰 수정)
         const myVotes = rData.votes?.[myId];
         setHasVoted(!!myVotes);
 
       } else {
-        alert("존재하지 않거나 삭제된 투표방입니다.");
+        alert("존재하지 않거나 만료된 투표방입니다.");
         closeTinderFlow();
       }
     } catch (e) { console.error(e); }
   };
 
-  // 🌟 (버그 수정 3) 상태 전이 무한 루프 완벽 차단 및 reveal 전환 반영
+  // 🌟 (상태 전이 버그 수정) 무한 루프 차단 및 각 방 상태에 따른 강제 전환
   useEffect(() => {
     if (!tinderRoomId) return;
     const unsub = onSnapshot(doc(db, "rooms", tinderRoomId), (docSnap) => {
@@ -381,15 +378,15 @@ export default function Home() {
         setRoomData(data);
 
         setTinderState((prevState) => {
-          if (data.status === 'waiting' && (prevState === 'setup' || prevState === 'idle')) return 'share_room';
-          if (data.status === 'playing' && (prevState === 'setup' || prevState === 'share_room' || prevState === 'idle')) {
+          if (data.status === 'waiting') return 'share_room'; // 재투표 시 무조건 강제 복귀
+          if (data.status === 'playing' && prevState !== 'leaderboard' && prevState !== 'winner_reveal' && prevState !== 'final_menu') {
             return hasVoted ? 'leaderboard' : 'playing';
           }
-          if (data.status === 'closed' && (prevState === 'setup' || prevState === 'share_room' || prevState === 'playing' || prevState === 'idle')) {
+          if (data.status === 'closed' && prevState !== 'winner_reveal' && prevState !== 'final_menu') {
             return 'leaderboard';
           }
           if (data.status === 'reveal' && prevState === 'leaderboard') {
-            return 'winner_reveal'; // 방장이 결정 시 모두 결과창으로 짠!
+            return 'winner_reveal';
           }
           return prevState;
         });
@@ -530,7 +527,7 @@ export default function Home() {
   const searchLocationBasedPlaces = async (menu: string, lat: number, lng: number, sort: string) => {
     setIsLocating(true);
     try {
-      const KAKAO_KEY = "deb0556cf6ab2cc0e38a558fd65ae01b"; // 🚨 REST API 키 필수!!
+      const KAKAO_KEY = "deb0556cf6ab2cc0e38a558fd65ae01b"; // 🚨 REST API 키 입력!!
       const res = await fetch(`https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(menu)}&y=${lat}&x=${lng}&radius=3000&size=15&sort=${sort}`, {
         headers: { Authorization: `KakaoAK ${KAKAO_KEY}` }
       });
@@ -637,16 +634,15 @@ export default function Home() {
       .then((results) => { setPreviews((prev) => [...prev, ...results]); e.target.value = ""; });
   };
 
-  // 🌟 (버그 수정) 카카오톡 공유 링크
   const handleLobbyKakaoShare = () => {
     if (!tinderRoomId) return;
     const kakao = (window as any).Kakao;
-    if (kakao && !kakao.isInitialized()) kakao.init('6d8e9624fa45bf20fe85ee7dc75aa28d'); // 사용자 JS 키 필요 시 변경
+    if (kakao && !kakao.isInitialized()) kakao.init('6d8e9624fa45bf20fe85ee7dc75aa28d');
     if (kakao) {
       const url = `${window.location.origin}/?room=${tinderRoomId}`;
       kakao.Share.sendDefault({
         objectType: 'feed',
-        content: { title: `🔥 맛집 투표방이 열렸습니다!`, description: `단톡방 친구들과 다같이 카드를 넘겨서 오늘 메뉴를 결정하세요!`, imageUrl: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1', link: { mobileWebUrl: url, webUrl: url } },
+        content: { title: `🔥 맛집 투표방이 열렸습니다!`, description: `친구들과 다같이 카드를 스와이프하고\n오늘 뭐 먹을지 투표로 결정하세요!`, imageUrl: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1', link: { mobileWebUrl: url, webUrl: url } },
         buttons: [{ title: '투표 참여하기', link: { mobileWebUrl: url, webUrl: url } }],
       });
     }
@@ -699,7 +695,7 @@ export default function Home() {
   const handleGoogleLogin = async () => { try { await signInWithPopup(auth, googleProvider); } catch (e) { } };
   const handleLogout = async () => { await signOut(auth); };
 
-  // 🌟 (버그 수정 2) 재투표 시 모든 데이터를 완벽하게 지우고 새 방 상태로 돌림
+  // 🌟 [버그 수정 3] 재투표 로직 - 데이터를 완벽하게 지우고 대기방으로!
   const handleRestartVote = async () => {
     if (!tinderRoomId || !isHost) return;
     let generatedItems: any[] = [];
@@ -715,7 +711,7 @@ export default function Home() {
         items: generatedItems, status: 'waiting', votes: {}, completedUsers: [], finalWinner: null
       });
       setCurrentTinderIndex(0); setLikedTinderItems([]); setHasVoted(false); setTinderFinalPick(0);
-    } catch (e) { alert("재투표 생성에 실패했습니다."); }
+    } catch (e) { alert("재투표 준비에 실패했습니다."); }
   };
 
   const handleCreateRoom = async (mode: 'menu' | 'restaurant') => {
@@ -808,6 +804,8 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#FFFDF6] text-stone-800 font-sans pb-20 relative">
+
+      {/* 고정된 헤더 */}
       <header className="fixed top-0 left-0 right-0 bg-white z-[100] border-b border-orange-100 shadow-md">
         <div className="max-w-md mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -832,6 +830,7 @@ export default function Home() {
         </div>
       </header>
 
+      {/* 메인 컨텐츠 영역 */}
       <div className="max-w-md mx-auto px-6 pt-24 pb-20 space-y-8 relative z-10">
 
         {user && !authLoading && (
@@ -1081,6 +1080,7 @@ export default function Home() {
                   <span className="text-[11px] font-bold text-stone-600 tracking-wider pl-2 truncate">{window.location.origin}/?room={tinderRoomId}</span>
                   <div className="flex gap-1 shrink-0 ml-2">
                     <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/?room=${tinderRoomId}`); alert('초대 링크가 복사되었습니다!'); }} className="bg-white p-1.5 rounded-md shadow-sm text-stone-500 hover:text-blue-500 transition-colors cursor-pointer"><Copy size={14} /></button>
+                    {/* 🌟 (버그 수정 1) 카카오톡 전용 아이콘 UI 추가 및 이벤트 바인딩 */}
                     <button onClick={handleLobbyKakaoShare} className="bg-[#FEE500] p-1.5 rounded-md shadow-sm text-stone-900 hover:bg-[#FDD800] transition-colors cursor-pointer"><MessageCircle size={14} /></button>
                   </div>
                 </div>
@@ -1107,7 +1107,7 @@ export default function Home() {
                       🚀 {roomData.participants?.length}명 투표 시작하기
                     </button>
                   ) : (
-                    <button disabled className="w-full bg-stone-200 text-stone-400 font-black py-3.5 rounded-xl text-[13px] cursor-not-allowed border border-stone-200">
+                    <button disabled className="w-full bg-stone-100 text-stone-400 font-black py-3.5 rounded-xl text-[13px] cursor-not-allowed border border-stone-200">
                       최소 2명 이상 참여해야 시작 가능
                     </button>
                   )
@@ -1190,116 +1190,137 @@ export default function Home() {
                 <h2 className="text-xl font-black text-stone-800 flex items-center gap-2"><Activity size={20} className="text-rose-500" /> 실시간 투표 현황</h2>
                 <div className="flex items-center justify-between mt-1">
                   <p className="text-[10px] text-stone-400">
-                    {roomData?.status === 'closed' ? "최종 결정할 항목을 선택하세요!" : "친구들의 투표를 실시간으로 확인하세요."}
+                    {roomData?.status === 'closed' ? "동점 항목 중 최종 1위를 결정해주세요!" : "친구들의 투표를 실시간으로 확인하세요."}
                   </p>
+                  {/* 🌟 실시간 투표 완료 현황판 */}
                   <span className="bg-orange-50 text-orange-600 text-[10px] font-black px-2 py-0.5 rounded-md border border-orange-100">
                     {roomData?.completedUsers?.length || 0} / {roomData?.participants?.length || 0}명 완료
                   </span>
                 </div>
               </div>
 
-              {roomLeaderboard.length === 0 ? (
-                <div className="flex-1 flex flex-col items-center justify-center py-10">
-                  {roomData?.status === 'closed' ? (
-                    <>
-                      <Frown size={56} className="text-stone-300 mb-4" />
-                      <p className="text-xs font-bold text-stone-500 text-center break-keep mb-6">아무도 좋아요를 누르지 않았어요.<br />의견이 완전히 엇갈렸습니다.</p>
-                      {isHost && (
-                        <button onClick={handleRestartVote} className="bg-stone-800 hover:bg-black text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 cursor-pointer transition-colors shadow-md">
-                          <RefreshCw size={16} /> 다시 투표하기
-                        </button>
-                      )}
-                    </>
-                  ) : (
-                    <>
+              {(() => {
+                // 🌟 (버그 수정 3) 0표 처리 및 동점자 선별 로직
+                const maxVotes = roomLeaderboard.length > 0 ? Math.max(...roomLeaderboard.map(r => r.count)) : 0;
+                const isFailed = maxVotes <= 1; // 아무도 안 찍었거나(0표) 다 찢어진 경우(1표)
+                const isTie = maxVotes > 1 && roomLeaderboard.filter(r => r.count === maxVotes).length > 1;
+
+                if (roomLeaderboard.length === 0) {
+                  return (
+                    <div className="flex-1 flex flex-col items-center justify-center py-10">
                       <Loader2 size={28} className="animate-spin text-stone-300 mb-3" />
                       <p className="text-xs font-bold text-stone-500">투표 데이터를 취합하고 있어요...</p>
-                    </>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-2.5 flex-1 overflow-y-auto scrollbar-hide pb-2">
-                  {roomLeaderboard.map((result: any, idx: number) => {
-                    const item = result.item;
-                    const maxVotes = Math.max(...roomLeaderboard.map(r => r.count));
-                    const isTopTier = result.count === maxVotes && maxVotes > 0;
-                    const isSelectable = roomData?.status === 'closed' && isTopTier;
-                    const isSelected = tinderFinalPick === idx;
-
-                    return (
-                      <div
-                        key={idx}
-                        onClick={() => { if (isSelectable && isHost) setTinderFinalPick(idx); }}
-                        className={`flex items-center gap-3 p-3 rounded-2xl border transition-all ${isSelectable && isSelected ? 'bg-orange-50 border-orange-500 shadow-md ring-2 ring-orange-200 cursor-pointer'
-                            : isSelectable ? 'bg-white border-stone-200 cursor-pointer hover:border-orange-300'
-                              : isTopTier ? 'bg-orange-50 border-orange-500 shadow-md'
-                                : 'bg-stone-50 border-stone-100 opacity-60'
-                          }`}
-                      >
-                        <div className="w-5 text-center font-black text-stone-400 text-xs shrink-0">{idx + 1}</div>
-                        {item.type === 'menu' ? <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 ${item.theme.bgColor}`}>{item.theme.emoji}</div> : <div className="w-10 h-10 rounded-xl bg-stone-200 overflow-hidden shrink-0">{item.data.imageUrls?.[0] ? <img src={item.data.imageUrls[0]} className="w-full h-full object-cover" /> : <UtensilsCrossed className="w-full h-full p-2 text-stone-400" />}</div>}
-                        <div className="min-w-0 flex-1">
-                          <h4 className={`font-black truncate text-sm ${(isSelectable && isSelected) || (!isSelectable && isTopTier) ? 'text-orange-600' : 'text-stone-800'}`}>{item.type === 'menu' ? item.name : item.data.storeName}</h4>
-                          <p className="text-[10px] text-stone-500 truncate">{item.type === 'menu' ? item.category : item.data.menu}</p>
-                        </div>
-                        <div className="shrink-0 flex items-center gap-1 bg-white px-2 py-1 rounded-md border border-stone-200 shadow-sm"><Heart size={10} className={isTopTier ? "text-rose-500 fill-rose-500" : "text-stone-400 fill-stone-400"} /><span className={`font-black text-[11px] ${isTopTier ? 'text-rose-600' : 'text-stone-600'}`}>{result.count}</span></div>
-                        {isSelectable && isSelected && <Check size={16} className="text-orange-500 shrink-0 ml-1" />}
-                      </div>
-                    )
-                  })}
-
-                  {roomData?.status === 'closed' && roomLeaderboard[0].count <= 1 && isHost && (
-                    <div className="bg-stone-100 p-4 rounded-xl text-center border border-stone-200 mt-4">
-                      <p className="text-xs font-bold text-stone-600 mb-3">메뉴가 통일되지 않았어요! 🤔</p>
-                      <button onClick={handleRestartVote} className="w-full bg-stone-800 hover:bg-black text-white py-2.5 rounded-lg text-xs font-bold cursor-pointer transition-colors shadow-md flex items-center justify-center gap-2">
-                        <RefreshCw size={14} /> 새로운 메뉴로 다시 투표하기
-                      </button>
                     </div>
-                  )}
-                </div>
-              )}
+                  );
+                }
 
-              <div className="shrink-0 pt-4 border-t border-stone-100 mt-2">
-                {roomData?.status === 'closed' ? (
-                  roomLeaderboard.length > 0 && roomLeaderboard[0].count > 0 ? (
-                    isHost ? (
-                      <button
-                        onClick={() => {
-                          const winner = roomLeaderboard[tinderFinalPick].item;
-                          // 🌟 서버에 승자 기록 후 Reveal 화면으로 넘기기
-                          updateDoc(doc(db, "rooms", tinderRoomId!), { status: 'reveal', finalWinner: winner });
-                        }}
-                        className="w-full bg-stone-900 hover:bg-black text-white font-black py-3.5 rounded-xl shadow-lg active:scale-95 transition-transform text-sm cursor-pointer"
-                      >
-                        최종 1위 결과 발표하기 🚀
-                      </button>
-                    ) : (
-                      <div className="text-center p-3 bg-stone-100 rounded-xl text-xs font-bold text-stone-500">방장이 최종 결과를 선택 중입니다...</div>
-                    )
-                  ) : <button onClick={closeTinderFlow} className="w-full bg-stone-100 text-stone-600 font-bold py-3.5 rounded-xl text-sm transition-colors hover:bg-stone-200 cursor-pointer">닫기 (결과 없음)</button>
-                ) : (
-                  isHost ? (
-                    <button onClick={() => updateDoc(doc(db, "rooms", tinderRoomId!), { status: 'closed' })} className="w-full bg-rose-500 hover:bg-rose-600 text-white font-black py-3.5 rounded-xl shadow-md transition-colors text-sm cursor-pointer">
-                      투표 마감하기 (결과 확정)
-                    </button>
-                  ) : (
-                    <div className="text-center p-3.5 bg-stone-50 rounded-xl"><p className="text-[11px] font-bold text-stone-500 animate-pulse">방장이 투표를 마감할 때까지 기다려주세요...</p></div>
-                  )
-                )}
-              </div>
+                if (roomData?.status === 'closed' && isFailed) {
+                  return (
+                    <div className="flex-1 flex flex-col items-center justify-center py-10 mt-6">
+                      <Frown size={56} className="text-stone-300 mb-4" />
+                      <p className="text-sm font-bold text-stone-600 text-center mb-2">아무도 메뉴를 통일하지 못했어요 🥲</p>
+                      <p className="text-xs text-stone-400 text-center break-keep mb-6">모두가 각자 다른 메뉴를 골랐거나<br />아무도 투표를 하지 않았습니다.</p>
+                      {isHost ? (
+                        <button onClick={handleRestartVote} className="w-full bg-stone-800 hover:bg-black text-white px-5 py-3.5 rounded-xl text-sm font-black flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-md">
+                          <RefreshCw size={16} /> 새로운 메뉴로 다시 투표하기
+                        </button>
+                      ) : (
+                        <div className="text-center p-3.5 bg-stone-50 rounded-xl w-full"><p className="text-[11px] font-bold text-stone-500 animate-pulse">방장이 새로운 투표를 준비 중입니다...</p></div>
+                      )}
+                    </div>
+                  );
+                }
+
+                return (
+                  <>
+                    <div className="space-y-2.5 flex-1 overflow-y-auto scrollbar-hide pb-2">
+                      {roomLeaderboard.map((result: any, idx: number) => {
+                        const item = result.item;
+                        const isTopTier = result.count === maxVotes && maxVotes > 0;
+                        const isSelectable = roomData?.status === 'closed' && isTie && isTopTier && isHost;
+                        const isSelected = tinderFinalPick === idx;
+
+                        return (
+                          <div
+                            key={idx}
+                            onClick={() => { if (isSelectable) setTinderFinalPick(idx); }}
+                            className={`flex items-center gap-3 p-3 rounded-2xl border transition-all ${isSelectable && isSelected ? 'bg-orange-50 border-orange-500 shadow-md ring-2 ring-orange-200 cursor-pointer'
+                                : isSelectable ? 'bg-white border-stone-200 cursor-pointer hover:border-orange-300'
+                                  : isTopTier && roomData?.status === 'closed' ? 'bg-orange-50 border-orange-500 shadow-md'
+                                    : 'bg-white border-stone-200 opacity-70'
+                              }`}
+                          >
+                            <div className="w-5 text-center font-black text-stone-400 text-xs shrink-0">{idx + 1}</div>
+                            {item.type === 'menu' ? <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 ${item.theme.bgColor}`}>{item.theme.emoji}</div> : <div className="w-10 h-10 rounded-xl bg-stone-200 overflow-hidden shrink-0">{item.data.imageUrls?.[0] ? <img src={item.data.imageUrls[0]} className="w-full h-full object-cover" /> : <UtensilsCrossed className="w-full h-full p-2 text-stone-400" />}</div>}
+                            <div className="min-w-0 flex-1">
+                              <h4 className={`font-black truncate text-sm ${(isSelectable && isSelected) || (!isSelectable && isTopTier) ? 'text-orange-600' : 'text-stone-800'}`}>{item.type === 'menu' ? item.name : item.data.storeName}</h4>
+                              <p className="text-[10px] text-stone-500 truncate">{item.type === 'menu' ? item.category : item.data.menu}</p>
+                            </div>
+                            <div className="shrink-0 flex items-center gap-1 bg-white px-2 py-1 rounded-md border border-stone-200 shadow-sm"><Heart size={10} className={isTopTier ? "text-rose-500 fill-rose-500" : "text-stone-400 fill-stone-400"} /><span className={`font-black text-[11px] ${isTopTier ? 'text-rose-600' : 'text-stone-600'}`}>{result.count}</span></div>
+                            {isSelectable && isSelected && <Check size={16} className="text-orange-500 shrink-0 ml-1" />}
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    <div className="shrink-0 pt-4 border-t border-stone-100 mt-2">
+                      {roomData?.status === 'closed' ? (
+                        isTie ? (
+                          isHost ? (
+                            <button
+                              onClick={() => {
+                                const winner = roomLeaderboard[tinderFinalPick].item;
+                                updateDoc(doc(db, "rooms", tinderRoomId!), { status: 'reveal', finalWinner: winner });
+                              }}
+                              className="w-full bg-stone-900 hover:bg-black text-white font-black py-3.5 rounded-xl shadow-lg active:scale-95 transition-transform text-sm cursor-pointer"
+                            >
+                              선택한 동점 항목으로 1위 발표하기 🚀
+                            </button>
+                          ) : (
+                            <div className="text-center p-3 bg-stone-50 rounded-xl text-[11px] font-bold text-stone-500 animate-pulse">방장이 동점 항목 중 최종 1위를 결정하고 있습니다...</div>
+                          )
+                        ) : (
+                          isHost ? (
+                            <button
+                              onClick={() => {
+                                const winner = roomLeaderboard[0].item;
+                                updateDoc(doc(db, "rooms", tinderRoomId!), { status: 'reveal', finalWinner: winner });
+                              }}
+                              className="w-full bg-stone-900 hover:bg-black text-white font-black py-3.5 rounded-xl shadow-lg active:scale-95 transition-transform text-sm cursor-pointer"
+                            >
+                              최종 1위 결과 발표하기 🚀
+                            </button>
+                          ) : (
+                            <div className="text-center p-3 bg-stone-50 rounded-xl text-[11px] font-bold text-stone-500 animate-pulse">방장이 최종 결과를 발표할 때까지 기다려주세요...</div>
+                          )
+                        )
+                      ) : (
+                        isHost ? (
+                          <button onClick={() => updateDoc(doc(db, "rooms", tinderRoomId!), { status: 'closed' })} className="w-full bg-rose-500 hover:bg-rose-600 text-white font-black py-3.5 rounded-xl shadow-md transition-colors text-sm cursor-pointer">
+                            투표 마감하기 (결과 확인)
+                          </button>
+                        ) : (
+                          <div className="text-center p-3.5 bg-stone-50 rounded-xl"><p className="text-[11px] font-bold text-stone-500 animate-pulse">방장이 투표를 마감할 때까지 기다려주세요...</p></div>
+                        )
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           )}
 
-          {/* 🌟 승자 발표(Reveal) 연출 모달 */}
+          {/* 🌟 (버그 수정 3) 극적인 승자 공개(Reveal) 모달창 연출! */}
           {tinderState === 'winner_reveal' && roomData?.finalWinner && (
             <div className="bg-white rounded-[2rem] p-6 shadow-2xl relative w-full max-w-sm flex flex-col h-[600px] overflow-hidden animate-in zoom-in-95 text-center justify-center">
-              <button onClick={closeTinderFlow} className="absolute top-5 right-5 p-1.5 rounded-full bg-white/50 hover:bg-white/80 text-stone-600 transition-colors z-50 cursor-pointer backdrop-blur-sm"><X size={18} /></button>
+              <button onClick={closeTinderFlow} className="absolute top-5 right-5 p-1.5 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 transition-colors z-50 cursor-pointer"><X size={18} /></button>
               <div className="absolute top-0 left-0 right-0 h-4 bg-gradient-to-r from-amber-400 to-orange-500" />
 
-              <PartyPopper size={64} className="mx-auto text-orange-500 mb-6 animate-bounce" />
-              <h2 className="text-xl font-bold text-stone-500 mb-2">모두가 선택한 1위는?</h2>
+              <PartyPopper size={56} className="mx-auto text-orange-500 mb-4 animate-bounce" />
+              <div className="bg-orange-100 text-orange-600 text-[10px] font-black px-3 py-1 rounded-full mx-auto mb-2 tracking-widest"><Sparkles size={12} className="inline mr-1" />결과 발표</div>
+              <h2 className="text-xl font-bold text-stone-600 mb-2">모두가 선택한 최종 1위는?</h2>
 
-              <div className="bg-orange-50 border-2 border-orange-200 rounded-[2rem] p-8 mx-2 my-6 shadow-inner transform scale-105 flex flex-col items-center justify-center">
+              <div className="bg-white border-2 border-orange-200 rounded-[2rem] p-8 mx-4 my-6 shadow-[0_0_40px_rgba(249,115,22,0.15)] transform scale-105 flex flex-col items-center justify-center">
                 {roomData.finalWinner.type === 'menu' ? (
                   <>
                     <span className="text-7xl drop-shadow-sm mb-4 block">{roomData.finalWinner.theme.emoji}</span>
@@ -1307,8 +1328,8 @@ export default function Home() {
                   </>
                 ) : (
                   <>
-                    <div className="w-24 h-24 mx-auto rounded-2xl overflow-hidden mb-4 shadow-md">{roomData.finalWinner.data.imageUrls?.[0] ? <img src={roomData.finalWinner.data.imageUrls[0]} className="w-full h-full object-cover" /> : <UtensilsCrossed className="w-full h-full p-4 bg-stone-200 text-stone-400" />}</div>
-                    <h3 className="text-2xl font-black text-stone-800 truncate tracking-tight">{roomData.finalWinner.data.storeName}</h3>
+                    <div className="w-24 h-24 mx-auto rounded-2xl overflow-hidden mb-4 shadow-md border border-stone-100">{roomData.finalWinner.data.imageUrls?.[0] ? <img src={roomData.finalWinner.data.imageUrls[0]} className="w-full h-full object-cover" /> : <UtensilsCrossed className="w-full h-full p-4 bg-stone-200 text-stone-400" />}</div>
+                    <h3 className="text-2xl font-black text-stone-800 truncate tracking-tight w-full px-2">{roomData.finalWinner.data.storeName}</h3>
                   </>
                 )}
               </div>
@@ -1323,7 +1344,7 @@ export default function Home() {
                 }}
                 className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black py-4 rounded-xl shadow-lg active:scale-95 transition-transform text-sm cursor-pointer mt-4"
               >
-                {tinderMode === 'menu' ? '📍 방장 위치 기준으로 맛집 찾기' : '🏆 1위 식당 영수증 띄우기'}
+                {tinderMode === 'menu' ? '📍 방장 위치 기준으로 주변 맛집 찾기' : '🏆 1위 식당 영수증 띄우기'}
               </button>
             </div>
           )}
@@ -1337,7 +1358,7 @@ export default function Home() {
 
               <div className="flex items-center gap-3 bg-orange-50 p-3 rounded-xl mb-4 shrink-0 border border-orange-100 mt-2">
                 <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center text-xl shadow-sm">{safeIconTheme.emoji}</div>
-                <div><p className="text-[10px] font-bold text-orange-500">투표 1위 메뉴</p><p className="text-lg font-black text-stone-800 leading-tight">{recommendedMenu}</p></div>
+                <div><p className="text-[10px] font-bold text-orange-500">최종 1위 메뉴</p><p className="text-lg font-black text-stone-800 leading-tight">{recommendedMenu}</p></div>
               </div>
 
               <div className="flex-1 overflow-y-auto scrollbar-hide space-y-2 pb-4">
@@ -1375,13 +1396,13 @@ export default function Home() {
         </div>
       )}
 
-      {/* 영수증 및 공유 관련 모달들 (z-[250]) */}
+      {/* 영수증 모달 및 공유 모달 영역 */}
       {shareReview && (
         <div className="fixed inset-0 z-[250] flex items-center justify-center p-0 sm:p-6" onClick={() => setShareReview(null)}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
           <div className="relative z-10 flex flex-col w-full h-full sm:h-auto sm:max-h-[90vh] max-w-md bg-[#FFFDF6] sm:rounded-[2rem] sm:border border-stone-200 shadow-2xl overflow-hidden animate-in zoom-in-95 sm:slide-in-from-bottom-0 slide-in-from-bottom-full duration-300" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center w-full p-5 shrink-0 bg-white border-b border-orange-50">
-              <h3 className="text-lg font-bold text-stone-800 flex items-center gap-2"><Share2 size={18} className="text-orange-500" /> 맛집 공유하기</h3>
+              <h3 className="text-lg font-bold text-stone-800 flex items-center gap-2"><Share2 size={18} className="text-orange-500" /> 맛집 영수증</h3>
               <button onClick={() => setShareReview(null)} className="p-1.5 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 transition-colors cursor-pointer"><X size={18} /></button>
             </div>
             <div className="flex-1 overflow-y-auto w-full px-4 pt-6 flex flex-col items-center pb-6 scrollbar-hide">
@@ -1418,9 +1439,17 @@ export default function Home() {
                 <div className="absolute bottom-0 left-0 right-0 h-2 bg-transparent rotate-180" style={{ backgroundImage: "linear-gradient(-45deg, transparent 4px, white 4px), linear-gradient(45deg, transparent 4px, white 4px)", backgroundSize: "8px 8px" }} />
               </div>
             </div>
+
+            {/* 🌟 (버그 수정 4) 영수증 하단 버튼 영역에 "카카오맵 검색" 버튼 추가 */}
             <div className="shrink-0 w-full p-4 bg-white border-t border-stone-100 pb-8 sm:pb-5">
               <div className="flex flex-col gap-2 w-full max-w-[300px] mx-auto">
                 <button onClick={handleKakaoShare} className="w-full bg-[#FEE500] hover:bg-[#FDD800] text-stone-900 font-black py-3.5 rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer"><MessageCircle size={18} className="fill-stone-900" /> 카카오톡으로 공유하기</button>
+
+                {/* 새로 추가된 카카오맵 다이렉트 검색 버튼! */}
+                <a href={`https://map.kakao.com/link/search/${encodeURIComponent(shareReview.storeName)}`} target="_blank" rel="noopener noreferrer" className="w-full bg-stone-800 hover:bg-black text-white font-black py-3.5 rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer transition-colors">
+                  <MapPin size={16} /> 카카오맵에서 식당 보기
+                </a>
+
                 <div className="flex gap-2">
                   <button onClick={handleDownloadReceipt} disabled={isGeneratingImage} className="flex-1 bg-stone-50 text-stone-800 text-sm font-bold py-3.5 rounded-xl shadow-sm border border-stone-200 flex items-center justify-center gap-2 cursor-pointer">{isGeneratingImage ? <Loader2 size={16} className="animate-spin text-orange-500" /> : <Download size={16} className="text-orange-500" />} 이미지 저장</button>
                   <button onClick={handleCopyLink} className="flex-1 bg-stone-50 text-stone-800 text-sm font-bold py-3.5 rounded-xl shadow-sm border border-stone-200 flex items-center justify-center gap-2 cursor-pointer"><Copy size={16} className="text-blue-500" /> 링크 복사</button>
