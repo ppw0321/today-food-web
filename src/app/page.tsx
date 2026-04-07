@@ -5,7 +5,7 @@ import {
   UtensilsCrossed, Star, Plus, RefreshCw, ChefHat, MapPin,
   ExternalLink, Check, Copy, LogIn, LogOut, User, Search, Tag,
   Pencil, X, Camera, Image as ImageIcon, ChevronLeft, ChevronRight,
-  Compass, Loader2, Trash2, Mail, Lock, Eye, EyeOff, Share2, Download, MessageCircle, Users, Link as LinkIcon, UserMinus, Settings, Flame, Heart, XCircle, Trophy, Activity, AlertCircle, PartyPopper
+  Compass, Loader2, Trash2, Mail, Lock, Eye, EyeOff, Share2, Download, MessageCircle, Users, Link as LinkIcon, UserMinus, Settings, Flame, Heart, XCircle, Trophy, Activity, Frown, PartyPopper, Sparkles
 } from "lucide-react";
 import { toPng } from 'html-to-image';
 import { auth, googleProvider, db, storage } from "@/lib/firebase";
@@ -81,8 +81,7 @@ const getMenuIconDetails = (menuName: string, category: string) => {
     "동남아": { bgColor: "bg-[#F0FDF4]", textColor: "text-[#14B8A6]" },
     "기타": { bgColor: "bg-[#F5F5F4]", textColor: "text-[#57534E]" }
   };
-  const defaultTheme = { bgColor: "bg-[#F5F5F4]", textColor: "text-[#57534E]" };
-  const theme = catThemes[category] || catThemes["기타"] || defaultTheme;
+  const theme = catThemes[category] || { bgColor: "bg-[#F5F5F4]", textColor: "text-[#57534E]" };
   return { emoji, bgColor: theme.bgColor, textColor: theme.textColor };
 };
 
@@ -122,7 +121,7 @@ interface Review {
 
 export default function Home() {
 
-  // 🌟 인앱 브라우저(카카오톡 등) 감지 시 외부 브라우저 강제 호출
+  // 🌟 (버그수정) 카카오톡 인앱 브라우저 강제 탈출 (로그인 세션 유지용)
   if (typeof window !== "undefined") {
     const userAgent = navigator.userAgent.toLowerCase();
     if (userAgent.includes("kakaotalk")) {
@@ -219,14 +218,14 @@ export default function Home() {
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [activeBadge, setActiveBadge] = useState<{ icon: string, title: string, color: string, bg: string } | null>(null);
 
-  // 🌟 Phase 2.2 틴더(스와이프) State (winner_reveal 추가)
+  // 🌟 Phase 2.3 틴더 상태 (winner_reveal 추가)
   const [tinderState, setTinderState] = useState<'idle' | 'setup' | 'share_room' | 'playing' | 'leaderboard' | 'winner_reveal' | 'final_menu'>('idle');
   const [tinderRoomId, setTinderRoomId] = useState<string | null>(null);
   const [tinderMode, setTinderMode] = useState<'menu' | 'restaurant'>('menu');
   const [tinderItems, setTinderItems] = useState<any[]>([]);
   const [currentTinderIndex, setCurrentTinderIndex] = useState(0);
   const [likedTinderItems, setLikedTinderItems] = useState<any[]>([]);
-  const [roomLeaderboard, setRoomLeaderboard] = useState<any[]>([]);
+  // 🌟 (버그수정) 룸 리더보드는 useMemo로 파생데이터로 변경 (동기화 꼬임 방지)
   const [roomData, setRoomData] = useState<any>(null);
   const [hasVoted, setHasVoted] = useState(false);
   const [guestId, setGuestId] = useState("");
@@ -234,7 +233,6 @@ export default function Home() {
   const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null);
   const [touchStartX, setTouchStartX] = useState(0);
   const [touchCurrentX, setTouchCurrentX] = useState(0);
-  const [finalWinnerItem, setFinalWinnerItem] = useState<any>(null); // 승자 연출용
 
   const myReviewsCount = reviews.filter((r: Review) => r.userId === user?.uid).length;
   const displayBadge = activeBadge || getCurrentBadge(myReviewsCount);
@@ -247,6 +245,19 @@ export default function Home() {
       return true;
     });
   }, [reviews, showGroupRecords, selectedAuthorFilter, user]);
+
+  // 🌟 리더보드 계산을 state가 아닌 파생 데이터로 통합
+  const roomLeaderboard = useMemo(() => {
+    if (!roomData || !tinderItems.length) return [];
+    const counts: Record<string, number> = {};
+    Object.values(roomData.votes || {}).forEach((likes: any) => {
+      likes.forEach((id: string) => { counts[id] = (counts[id] || 0) + 1; });
+    });
+    return Object.entries(counts)
+      .map(([name, count]) => ({ name, count, item: tinderItems.find(i => (i.type === 'menu' ? i.name : i.data.id) === name) }))
+      .filter(r => r.item !== undefined)
+      .sort((a, b) => b.count - a.count);
+  }, [roomData, tinderItems]);
 
   const normalize = (s: string) => s.replace(/[\s()（）]/g, "").toLowerCase();
   const getMenuCategory = (menuName: string): string | null => {
@@ -277,7 +288,7 @@ export default function Home() {
   const myName = user ? profileNickname : guestId;
   const isHost = roomData?.hostUid === myId;
 
-  // 🌟 백그라운드 검색 결과까지 완벽하게 청소하는 종료 함수
+  // 🌟 (버그 수정) 틴더 클린 종료 함수 (모든 상태 백지화)
   const closeTinderFlow = () => {
     setTinderState('idle');
     setTinderRoomId(null);
@@ -285,18 +296,13 @@ export default function Home() {
     setHasVoted(false);
     setCurrentTinderIndex(0);
     setLikedTinderItems([]);
-    setRoomLeaderboard([]);
     setSwipeDirection(null);
     setTouchCurrentX(0);
     setTinderFinalPick(0);
-    setFinalWinnerItem(null);
-
-    // 🌟 배경에 검색되어 있던 기존 결과들 리셋
     setRecommendedMenu(null);
     setNearbySaved([]);
     setNearbyExternal([]);
     setIsLocating(false);
-
     window.history.replaceState({}, document.title, window.location.pathname);
   };
 
@@ -316,6 +322,7 @@ export default function Home() {
     return () => unsubscribe();
   }, []);
 
+  // 🌟 (버그 수정 1) URL 파라미터 감지 후 단 한번만 방 입장 처리
   useEffect(() => {
     if (typeof window === "undefined" || authLoading || !myName) return;
 
@@ -353,15 +360,19 @@ export default function Home() {
         }
         setTinderRoomId(roomId); setTinderMode(rData.mode); setTinderItems(rData.items || []);
         setCurrentTinderIndex(0); setLikedTinderItems([]); setTinderFinalPick(0);
-        const voteDoc = await getDoc(doc(db, "rooms", roomId, "votes", myId));
-        setHasVoted(voteDoc.exists());
+
+        // 🌟 내 투표 여부 확인 로직 (votes 맵 구조에 맞춰 수정)
+        const myVotes = rData.votes?.[myId];
+        setHasVoted(!!myVotes);
+
       } else {
-        alert("존재하지 않거나 만료된 투표방입니다.");
+        alert("존재하지 않거나 삭제된 투표방입니다.");
         closeTinderFlow();
       }
     } catch (e) { console.error(e); }
   };
 
+  // 🌟 (버그 수정 3) 상태 전이 무한 루프 완벽 차단 및 reveal 전환 반영
   useEffect(() => {
     if (!tinderRoomId) return;
     const unsub = onSnapshot(doc(db, "rooms", tinderRoomId), (docSnap) => {
@@ -378,7 +389,7 @@ export default function Home() {
             return 'leaderboard';
           }
           if (data.status === 'reveal' && prevState === 'leaderboard') {
-            return 'winner_reveal';
+            return 'winner_reveal'; // 방장이 결정 시 모두 결과창으로 짠!
           }
           return prevState;
         });
@@ -386,23 +397,6 @@ export default function Home() {
     });
     return () => unsub();
   }, [tinderRoomId, hasVoted]);
-
-  useEffect(() => {
-    if (!tinderRoomId || (tinderState !== 'leaderboard' && tinderState !== 'playing')) return;
-    const unsub = onSnapshot(collection(db, "rooms", tinderRoomId, "votes"), (snap) => {
-      const voteCounts: Record<string, number> = {};
-      snap.forEach(doc => {
-        const userLikes = doc.data().likes || [];
-        userLikes.forEach((itemName: string) => { voteCounts[itemName] = (voteCounts[itemName] || 0) + 1; });
-      });
-      const sortedLeaderboard = Object.entries(voteCounts)
-        .map(([name, count]) => ({ name, count, item: tinderItems.find(i => (i.type === 'menu' ? i.name : i.data.id) === name) }))
-        .filter(item => item.item !== undefined)
-        .sort((a, b) => b.count - a.count);
-      setRoomLeaderboard(sortedLeaderboard);
-    });
-    return () => unsub();
-  }, [tinderRoomId, tinderState, tinderItems]);
 
   useEffect(() => {
     if (!user) { setActiveBadge(null); setPartnerUids([]); setProfileNickname(""); setProfilePhotoUrl(""); return; }
@@ -461,6 +455,11 @@ export default function Home() {
     });
     return () => unsubs.forEach(fn => fn());
   }, [user, showGroupRecords, partnerUids, filterCategory, profileNickname, profilePhotoUrl, partnersData]);
+
+  useEffect(() => {
+    const script = document.createElement("script"); script.src = "https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js"; script.async = true;
+    document.head.appendChild(script); return () => { if (document.head.contains(script)) document.head.removeChild(script); };
+  }, []);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault(); if (!user) return; setIsSavingProfile(true);
@@ -638,21 +637,16 @@ export default function Home() {
       .then((results) => { setPreviews((prev) => [...prev, ...results]); e.target.value = ""; });
   };
 
-  // 🌟 (신규) 대기방에서 쓰는 카카오톡 공유 기능
+  // 🌟 (버그 수정) 카카오톡 공유 링크
   const handleLobbyKakaoShare = () => {
     if (!tinderRoomId) return;
     const kakao = (window as any).Kakao;
-    if (kakao && !kakao.isInitialized()) kakao.init('6d8e9624fa45bf20fe85ee7dc75aa28d');
+    if (kakao && !kakao.isInitialized()) kakao.init('6d8e9624fa45bf20fe85ee7dc75aa28d'); // 사용자 JS 키 필요 시 변경
     if (kakao) {
       const url = `${window.location.origin}/?room=${tinderRoomId}`;
       kakao.Share.sendDefault({
         objectType: 'feed',
-        content: {
-          title: `🔥 맛집 투표방이 열렸습니다!`,
-          description: `친구들과 다같이 카드를 스와이프하고\n오늘 뭐 먹을지 투표로 결정하세요!`,
-          imageUrl: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1',
-          link: { mobileWebUrl: url, webUrl: url }
-        },
+        content: { title: `🔥 맛집 투표방이 열렸습니다!`, description: `단톡방 친구들과 다같이 카드를 넘겨서 오늘 메뉴를 결정하세요!`, imageUrl: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1', link: { mobileWebUrl: url, webUrl: url } },
         buttons: [{ title: '투표 참여하기', link: { mobileWebUrl: url, webUrl: url } }],
       });
     }
@@ -705,106 +699,69 @@ export default function Home() {
   const handleGoogleLogin = async () => { try { await signInWithPopup(auth, googleProvider); } catch (e) { } };
   const handleLogout = async () => { await signOut(auth); };
 
-  // 🌟 [투표 리셋] 방장이 투표를 리셋하고 새로운 메뉴로 대기방으로 돌아갑니다.
+  // 🌟 (버그 수정 2) 재투표 시 모든 데이터를 완벽하게 지우고 새 방 상태로 돌림
   const handleRestartVote = async () => {
     if (!tinderRoomId || !isHost) return;
-
     let generatedItems: any[] = [];
     if (tinderMode === 'menu') {
       const shuffled = [...BASE_MENUS].sort(() => 0.5 - Math.random()).slice(0, 10);
-      generatedItems = shuffled.map(m => {
-        const cat = getMenuCategory(m) || "기타";
-        return { type: 'menu', name: m, category: cat, theme: getMenuIconDetails(m, cat) };
-      });
+      generatedItems = shuffled.map(m => ({ type: 'menu', name: m, category: getMenuCategory(m) || "기타", theme: getMenuIconDetails(m, getMenuCategory(m) || "기타") }));
     } else {
       const shuffled = [...filteredReviews].sort(() => 0.5 - Math.random()).slice(0, 10);
       generatedItems = shuffled.map(r => ({ type: 'restaurant', data: r }));
     }
-
     try {
       await updateDoc(doc(db, "rooms", tinderRoomId), {
-        items: generatedItems,
-        status: 'waiting',
-        completedUsers: [] // 완료자 목록 리셋
+        items: generatedItems, status: 'waiting', votes: {}, completedUsers: [], finalWinner: null
       });
-      // 기존 투표 내역 삭제는 구조상 복잡하므로 클라이언트 상태만 리셋해줍니다. (새 투표시 덮어씌워짐)
-      setCurrentTinderIndex(0);
-      setLikedTinderItems([]);
-      setHasVoted(false);
-      setTinderFinalPick(0);
+      setCurrentTinderIndex(0); setLikedTinderItems([]); setHasVoted(false); setTinderFinalPick(0);
     } catch (e) { alert("재투표 생성에 실패했습니다."); }
   };
 
   const handleCreateRoom = async (mode: 'menu' | 'restaurant') => {
     setTinderMode(mode);
     const newRoomId = generateRandomString();
-
     let generatedItems: any[] = [];
     if (mode === 'menu') {
       const shuffled = [...BASE_MENUS].sort(() => 0.5 - Math.random()).slice(0, 10);
-      generatedItems = shuffled.map(m => {
-        const cat = getMenuCategory(m) || "기타";
-        return { type: 'menu', name: m, category: cat, theme: getMenuIconDetails(m, cat) };
-      });
+      generatedItems = shuffled.map(m => ({ type: 'menu', name: m, category: getMenuCategory(m) || "기타", theme: getMenuIconDetails(m, getMenuCategory(m) || "기타") }));
     } else {
       const shuffled = [...filteredReviews].sort(() => 0.5 - Math.random()).slice(0, 10);
       generatedItems = shuffled.map(r => ({ type: 'restaurant', data: r }));
     }
-
     try {
-      setCurrentTinderIndex(0);
-      setLikedTinderItems([]);
-      setHasVoted(false);
-      setTinderFinalPick(0);
-
+      setCurrentTinderIndex(0); setLikedTinderItems([]); setHasVoted(false); setTinderFinalPick(0);
       let hostLat = userLocation?.lat || 37.498095;
       let hostLng = userLocation?.lng || 127.027610;
       if (!userLocation && navigator.geolocation) {
         navigator.geolocation.getCurrentPosition((pos) => { hostLat = pos.coords.latitude; hostLng = pos.coords.longitude; setUserLocation({ lat: hostLat, lng: hostLng }); });
       }
-
-      // 🌟 방 만들 때 completedUsers 배열 추가
       await setDoc(doc(db, "rooms", newRoomId), {
-        mode, items: generatedItems, createdAt: serverTimestamp(), hostUid: myId, status: 'waiting', participants: [myName], completedUsers: [],
-        location: { lat: hostLat, lng: hostLng }
+        mode, items: generatedItems, createdAt: serverTimestamp(), hostUid: myId, status: 'waiting', participants: [myName], completedUsers: [], votes: {}, finalWinner: null, location: { lat: hostLat, lng: hostLng }
       });
       setTinderItems(generatedItems); setTinderRoomId(newRoomId); setTinderState('share_room');
     } catch (e) { alert("방 생성 실패. 파이어베이스 보안 규칙을 다시 확인해주세요!"); }
   };
 
-  // 🌟 (버그 수정 4) 투표 완료 시 방 데이터에 내 이름(completedUsers) 추가
   const submitVotes = async (finalLikes: any[]) => {
     if (!tinderRoomId) return;
     try {
       const likeIds = finalLikes.map((item: any) => item.type === 'menu' ? item.name : item.data.id);
-      await setDoc(doc(db, "rooms", tinderRoomId, "votes", myId), { voterName: myName, likes: likeIds, timestamp: serverTimestamp() });
-      await updateDoc(doc(db, "rooms", tinderRoomId), { completedUsers: arrayUnion(myName) });
+      await updateDoc(doc(db, "rooms", tinderRoomId), {
+        [`votes.${myId}`]: likeIds,
+        completedUsers: arrayUnion(myName)
+      });
       setHasVoted(true);
     } catch (e) { }
   };
 
   const handleSwipe = (direction: 'left' | 'right') => {
     if (swipeDirection !== null) return; setSwipeDirection(direction);
-
     setTimeout(() => {
       let updatedLikes = [...likedTinderItems];
-      if (direction === 'right') {
-        updatedLikes.push(tinderItems[currentTinderIndex]);
-        setLikedTinderItems(updatedLikes);
-      }
-
-      if (currentTinderIndex + 1 < tinderItems.length) {
-        setCurrentTinderIndex(prev => prev + 1);
-        setSwipeDirection(null);
-        setTouchCurrentX(0);
-        setTouchStartX(0);
-      } else {
-        submitVotes(updatedLikes);
-        setTinderState('leaderboard');
-        setSwipeDirection(null);
-        setTouchCurrentX(0);
-        setTouchStartX(0);
-      }
+      if (direction === 'right') { updatedLikes.push(tinderItems[currentTinderIndex]); setLikedTinderItems(updatedLikes); }
+      if (currentTinderIndex + 1 < tinderItems.length) { setCurrentTinderIndex(prev => prev + 1); setSwipeDirection(null); setTouchCurrentX(0); setTouchStartX(0); }
+      else { submitVotes(updatedLikes); setTinderState('leaderboard'); setSwipeDirection(null); setTouchCurrentX(0); setTouchStartX(0); }
     }, 300);
   };
 
@@ -851,7 +808,6 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#FFFDF6] text-stone-800 font-sans pb-20 relative">
-
       <header className="fixed top-0 left-0 right-0 bg-white z-[100] border-b border-orange-100 shadow-md">
         <div className="max-w-md mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -1072,7 +1028,7 @@ export default function Home() {
       </div>
 
       {/* ============================================================== */}
-      {/* 🌟 틴더 기능 전체 모달 (에러 없는 완전체) */}
+      {/* 🌟 틴더 기능 전체 모달 (z-[200]) */}
       {/* ============================================================== */}
       {tinderState !== 'idle' && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-stone-900/95 backdrop-blur-md overflow-hidden p-4">
@@ -1090,7 +1046,6 @@ export default function Home() {
                 <button onClick={() => handleCreateRoom('menu')} className="w-full bg-orange-50 rounded-2xl p-5 text-left border border-orange-100 hover:border-orange-400 cursor-pointer transition-colors group">
                   <div className="flex justify-between items-center mb-2">
                     <span className="bg-orange-100 text-orange-600 text-[10px] font-black px-2 py-1 rounded uppercase tracking-wider">Track A</span>
-                    <Flame size={18} className="text-orange-400" />
                   </div>
                   <h3 className="text-lg font-black text-orange-700 mb-1">메뉴 이상형 월드컵</h3>
                   <p className="text-[11px] text-orange-600/80 font-medium leading-relaxed break-keep">랜덤으로 뽑힌 10가지 메뉴 중에서<br />다수가 좋아하는 메뉴를 찾아냅니다.</p>
@@ -1152,7 +1107,7 @@ export default function Home() {
                       🚀 {roomData.participants?.length}명 투표 시작하기
                     </button>
                   ) : (
-                    <button disabled className="w-full bg-stone-100 text-stone-400 font-black py-3.5 rounded-xl text-[13px] cursor-not-allowed border border-stone-200">
+                    <button disabled className="w-full bg-stone-200 text-stone-400 font-black py-3.5 rounded-xl text-[13px] cursor-not-allowed border border-stone-200">
                       최소 2명 이상 참여해야 시작 가능
                     </button>
                   )
@@ -1237,7 +1192,6 @@ export default function Home() {
                   <p className="text-[10px] text-stone-400">
                     {roomData?.status === 'closed' ? "최종 결정할 항목을 선택하세요!" : "친구들의 투표를 실시간으로 확인하세요."}
                   </p>
-                  {/* 🌟 실시간 투표 완료 현황 표시 */}
                   <span className="bg-orange-50 text-orange-600 text-[10px] font-black px-2 py-0.5 rounded-md border border-orange-100">
                     {roomData?.completedUsers?.length || 0} / {roomData?.participants?.length || 0}명 완료
                   </span>
@@ -1248,8 +1202,8 @@ export default function Home() {
                 <div className="flex-1 flex flex-col items-center justify-center py-10">
                   {roomData?.status === 'closed' ? (
                     <>
-                      <span className="text-5xl mb-3">🥲</span>
-                      <p className="text-xs font-bold text-stone-500 text-center break-keep mb-6">아무도 좋아요를 누르지 않았어요.<br />의견이 엇갈렸습니다.</p>
+                      <Frown size={56} className="text-stone-300 mb-4" />
+                      <p className="text-xs font-bold text-stone-500 text-center break-keep mb-6">아무도 좋아요를 누르지 않았어요.<br />의견이 완전히 엇갈렸습니다.</p>
                       {isHost && (
                         <button onClick={handleRestartVote} className="bg-stone-800 hover:bg-black text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 cursor-pointer transition-colors shadow-md">
                           <RefreshCw size={16} /> 다시 투표하기
@@ -1267,8 +1221,6 @@ export default function Home() {
                 <div className="space-y-2.5 flex-1 overflow-y-auto scrollbar-hide pb-2">
                   {roomLeaderboard.map((result: any, idx: number) => {
                     const item = result.item;
-
-                    // 🌟 동점자 및 0표 처리 로직 (가장 많은 표를 받은 사람들만 1등 처리)
                     const maxVotes = Math.max(...roomLeaderboard.map(r => r.count));
                     const isTopTier = result.count === maxVotes && maxVotes > 0;
                     const isSelectable = roomData?.status === 'closed' && isTopTier;
@@ -1277,7 +1229,7 @@ export default function Home() {
                     return (
                       <div
                         key={idx}
-                        onClick={() => { if (isSelectable) setTinderFinalPick(idx); }}
+                        onClick={() => { if (isSelectable && isHost) setTinderFinalPick(idx); }}
                         className={`flex items-center gap-3 p-3 rounded-2xl border transition-all ${isSelectable && isSelected ? 'bg-orange-50 border-orange-500 shadow-md ring-2 ring-orange-200 cursor-pointer'
                             : isSelectable ? 'bg-white border-stone-200 cursor-pointer hover:border-orange-300'
                               : isTopTier ? 'bg-orange-50 border-orange-500 shadow-md'
@@ -1299,7 +1251,9 @@ export default function Home() {
                   {roomData?.status === 'closed' && roomLeaderboard[0].count <= 1 && isHost && (
                     <div className="bg-stone-100 p-4 rounded-xl text-center border border-stone-200 mt-4">
                       <p className="text-xs font-bold text-stone-600 mb-3">메뉴가 통일되지 않았어요! 🤔</p>
-                      <button onClick={handleRestartVote} className="w-full bg-stone-800 hover:bg-black text-white py-2.5 rounded-lg text-xs font-bold cursor-pointer transition-colors shadow-md">새로운 메뉴로 다시 투표하기</button>
+                      <button onClick={handleRestartVote} className="w-full bg-stone-800 hover:bg-black text-white py-2.5 rounded-lg text-xs font-bold cursor-pointer transition-colors shadow-md flex items-center justify-center gap-2">
+                        <RefreshCw size={14} /> 새로운 메뉴로 다시 투표하기
+                      </button>
                     </div>
                   )}
                 </div>
@@ -1308,16 +1262,20 @@ export default function Home() {
               <div className="shrink-0 pt-4 border-t border-stone-100 mt-2">
                 {roomData?.status === 'closed' ? (
                   roomLeaderboard.length > 0 && roomLeaderboard[0].count > 0 ? (
-                    <button
-                      onClick={() => {
-                        const winner = roomLeaderboard[tinderFinalPick].item;
-                        setFinalWinnerItem(winner); // 승자 저장 후 공개 화면으로 이동
-                        updateDoc(doc(db, "rooms", tinderRoomId!), { status: 'reveal' });
-                      }}
-                      className="w-full bg-stone-900 hover:bg-black text-white font-black py-3.5 rounded-xl shadow-lg active:scale-95 transition-transform text-sm cursor-pointer"
-                    >
-                      최종 1위 결과 확인하기 🚀
-                    </button>
+                    isHost ? (
+                      <button
+                        onClick={() => {
+                          const winner = roomLeaderboard[tinderFinalPick].item;
+                          // 🌟 서버에 승자 기록 후 Reveal 화면으로 넘기기
+                          updateDoc(doc(db, "rooms", tinderRoomId!), { status: 'reveal', finalWinner: winner });
+                        }}
+                        className="w-full bg-stone-900 hover:bg-black text-white font-black py-3.5 rounded-xl shadow-lg active:scale-95 transition-transform text-sm cursor-pointer"
+                      >
+                        최종 1위 결과 발표하기 🚀
+                      </button>
+                    ) : (
+                      <div className="text-center p-3 bg-stone-100 rounded-xl text-xs font-bold text-stone-500">방장이 최종 결과를 선택 중입니다...</div>
+                    )
                   ) : <button onClick={closeTinderFlow} className="w-full bg-stone-100 text-stone-600 font-bold py-3.5 rounded-xl text-sm transition-colors hover:bg-stone-200 cursor-pointer">닫기 (결과 없음)</button>
                 ) : (
                   isHost ? (
@@ -1332,25 +1290,25 @@ export default function Home() {
             </div>
           )}
 
-          {/* 🌟 승자 공개(Reveal) 극적 연출 창 */}
-          {tinderState === 'winner_reveal' && finalWinnerItem && (
+          {/* 🌟 승자 발표(Reveal) 연출 모달 */}
+          {tinderState === 'winner_reveal' && roomData?.finalWinner && (
             <div className="bg-white rounded-[2rem] p-6 shadow-2xl relative w-full max-w-sm flex flex-col h-[600px] overflow-hidden animate-in zoom-in-95 text-center justify-center">
-              <button onClick={closeTinderFlow} className="absolute top-5 right-5 p-1.5 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 transition-colors z-50 cursor-pointer"><X size={18} /></button>
-              <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-amber-400 to-orange-500" />
+              <button onClick={closeTinderFlow} className="absolute top-5 right-5 p-1.5 rounded-full bg-white/50 hover:bg-white/80 text-stone-600 transition-colors z-50 cursor-pointer backdrop-blur-sm"><X size={18} /></button>
+              <div className="absolute top-0 left-0 right-0 h-4 bg-gradient-to-r from-amber-400 to-orange-500" />
 
-              <PartyPopper size={56} className="mx-auto text-orange-500 mb-6 animate-bounce" />
+              <PartyPopper size={64} className="mx-auto text-orange-500 mb-6 animate-bounce" />
               <h2 className="text-xl font-bold text-stone-500 mb-2">모두가 선택한 1위는?</h2>
 
-              <div className="bg-orange-50 border-2 border-orange-200 rounded-[2rem] p-8 mx-4 my-6 shadow-inner transform scale-105">
-                {finalWinnerItem.type === 'menu' ? (
+              <div className="bg-orange-50 border-2 border-orange-200 rounded-[2rem] p-8 mx-2 my-6 shadow-inner transform scale-105 flex flex-col items-center justify-center">
+                {roomData.finalWinner.type === 'menu' ? (
                   <>
-                    <span className="text-7xl drop-shadow-sm">{finalWinnerItem.theme.emoji}</span>
-                    <h3 className="text-3xl font-black text-stone-800 mt-4 tracking-tight">{finalWinnerItem.name}</h3>
+                    <span className="text-7xl drop-shadow-sm mb-4 block">{roomData.finalWinner.theme.emoji}</span>
+                    <h3 className="text-3xl font-black text-stone-800 tracking-tight">{roomData.finalWinner.name}</h3>
                   </>
                 ) : (
                   <>
-                    <div className="w-24 h-24 mx-auto rounded-2xl overflow-hidden mb-4 shadow-md">{finalWinnerItem.data.imageUrls?.[0] ? <img src={finalWinnerItem.data.imageUrls[0]} className="w-full h-full object-cover" /> : <UtensilsCrossed className="w-full h-full p-4 bg-stone-200 text-stone-400" />}</div>
-                    <h3 className="text-2xl font-black text-stone-800 truncate tracking-tight">{finalWinnerItem.data.storeName}</h3>
+                    <div className="w-24 h-24 mx-auto rounded-2xl overflow-hidden mb-4 shadow-md">{roomData.finalWinner.data.imageUrls?.[0] ? <img src={roomData.finalWinner.data.imageUrls[0]} className="w-full h-full object-cover" /> : <UtensilsCrossed className="w-full h-full p-4 bg-stone-200 text-stone-400" />}</div>
+                    <h3 className="text-2xl font-black text-stone-800 truncate tracking-tight">{roomData.finalWinner.data.storeName}</h3>
                   </>
                 )}
               </div>
@@ -1358,9 +1316,9 @@ export default function Home() {
               <button
                 onClick={() => {
                   if (tinderMode === 'menu') {
-                    setTinderState('final_menu'); executeSearchWithRoomLocation(finalWinnerItem.name);
+                    setTinderState('final_menu'); executeSearchWithRoomLocation(roomData.finalWinner.name);
                   } else {
-                    closeTinderFlow(); setShareReview(finalWinnerItem.data); setReceiptImageIndex(0);
+                    closeTinderFlow(); setShareReview(roomData.finalWinner.data); setReceiptImageIndex(0);
                   }
                 }}
                 className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black py-4 rounded-xl shadow-lg active:scale-95 transition-transform text-sm cursor-pointer mt-4"
@@ -1417,166 +1375,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* ============================================================== */}
-      {/* 4. 기타 보조 모달 창들 (프로필, 친구, 영수증, 리뷰) z-210 고정 */}
-      {/* ============================================================== */}
-
-      {isProfileModalOpen && (
-        <div className="fixed inset-0 z-[210] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsProfileModalOpen(false)} />
-          <div className="relative bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in-95">
-            <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-black flex items-center gap-2"><Settings className="text-orange-500" /> 내 프로필 설정</h3><button onClick={() => setIsProfileModalOpen(false)} className="p-1.5 rounded-full bg-stone-100 text-stone-500 cursor-pointer"><X size={18} /></button></div>
-            <form onSubmit={handleSaveProfile} className="space-y-6">
-              <div className="flex flex-col items-center gap-3">
-                <div className="relative">
-                  <div className="w-24 h-24 rounded-full border-2 border-orange-200 bg-orange-50 overflow-hidden flex items-center justify-center">{profilePhotoUrl ? <img src={profilePhotoUrl} className="w-full h-full object-cover" /> : <User size={40} className="text-orange-300" />}</div>
-                  <label className="absolute bottom-0 right-0 bg-white p-2 rounded-full shadow-md border border-stone-200 cursor-pointer hover:bg-stone-50 transition-colors"><Camera size={16} className="text-stone-600" /><input type="file" accept="image/*" className="hidden" onChange={handleProfileImageSelect} /></label>
-                </div>
-                <p className="text-[10px] text-stone-400">사진을 터치해 변경하세요</p>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-stone-500 mb-2 uppercase tracking-wider ml-1">나의 닉네임</label>
-                <input type="text" value={profileNickname} onChange={(e) => setProfileNickname(e.target.value)} required placeholder="닉네임을 입력하세요 (예: 맛잘알 지훈)" maxLength={10} className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-orange-500 outline-none transition-all" />
-              </div>
-              <button type="submit" disabled={isSavingProfile} className="w-full bg-stone-800 hover:bg-black text-white font-black py-4 rounded-xl shadow-lg active:scale-95 transition-all disabled:opacity-50 cursor-pointer">{isSavingProfile ? <Loader2 className="animate-spin mx-auto" /> : "프로필 저장하기"}</button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {isSyncModalOpen && (
-        <div className="fixed inset-0 z-[210] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsSyncModalOpen(false)} />
-          <div className="relative bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 max-h-[90vh] flex flex-col">
-            <div className="flex justify-between items-center mb-4 shrink-0"><h3 className="text-xl font-black flex items-center gap-2"><MapPin className="text-blue-500" fill="#E0F2FE" /> 공유 지도 만들기</h3><button onClick={() => setIsSyncModalOpen(false)} className="p-1.5 rounded-full bg-stone-100 text-stone-500 cursor-pointer"><X size={18} /></button></div>
-            <div className="overflow-y-auto scrollbar-hide space-y-6 pb-2">
-              <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 text-center"><p className="text-[13px] font-bold text-blue-800 leading-relaxed">서로의 코드를 입력하면<br />맛집 지도가 하나로 합쳐져요! 🗺️✨</p></div>
-              <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100">
-                <p className="text-[11px] font-bold text-stone-400 mb-2 uppercase tracking-wider">나의 연결 코드</p>
-                <div className="flex items-center justify-between">
-                  <code className="text-sm font-black text-blue-600 tracking-widest bg-white px-2 py-1 rounded shadow-sm border border-stone-100">{user?.uid?.substring(0, 15)}...</code>
-                  <button onClick={() => { navigator.clipboard.writeText(user?.uid || ""); alert("내 코드가 복사되었습니다!"); }} className="p-2 bg-white rounded-lg shadow-sm text-stone-400 hover:text-blue-500 cursor-pointer"><Copy size={16} /></button>
-                </div>
-              </div>
-              <div className="space-y-3">
-                <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">친구 코드 입력</p>
-                <input type="text" value={partnerCode} onChange={(e) => setPartnerCode(e.target.value)} placeholder="친구의 코드를 붙여넣기 하세요" className="w-full bg-white border border-stone-200 rounded-xl py-4 px-4 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm" />
-                <button onClick={handleConnectPartner} disabled={isConnecting || !partnerCode} className="w-full bg-blue-500 hover:bg-blue-600 text-white font-black py-3.5 rounded-xl shadow-md active:scale-95 transition-all disabled:opacity-50 cursor-pointer">{isConnecting ? <Loader2 className="animate-spin mx-auto" /> : "연결 신청하기"}</button>
-              </div>
-              {partnerUids.length > 0 && (
-                <div className="pt-4 border-t border-stone-100">
-                  <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1 mb-3">현재 연결된 친구들</p>
-                  <div className="space-y-2">
-                    {partnerUids.map(uid => {
-                      const p = partnersData[uid];
-                      return (
-                        <div key={uid} className="flex items-center justify-between bg-white border border-stone-100 p-3 rounded-xl shadow-sm">
-                          <div className="flex items-center gap-3">{p?.photoUrl ? <img src={p.photoUrl} className="w-8 h-8 rounded-full object-cover" /> : <div className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-400"><User size={14} /></div>}<span className="font-bold text-sm text-stone-700">{p?.nickname || "친구"}</span></div>
-                          <button onClick={() => handleDisconnect(uid, p?.nickname || "친구")} className="text-[10px] font-bold bg-red-50 text-red-500 hover:bg-red-100 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"><UserMinus size={12} /> 연결 끊기</button>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isBadgeModalOpen && (
-        <div className="fixed inset-0 z-[210] flex items-center justify-center p-4" onClick={() => setIsBadgeModalOpen(false)}>
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-          <div className="relative bg-white w-full max-w-sm rounded-3xl p-5 shadow-2xl max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4 shrink-0"><h3 className="text-xl font-black flex items-center gap-2"><Star className="text-orange-500 fill-orange-500" size={20} /> 내 뱃지 도감</h3><button onClick={() => setIsBadgeModalOpen(false)} className="p-1.5 rounded-full bg-stone-100 cursor-pointer"><X size={18} /></button></div>
-            {isLoadingBadges ? <div className="py-20 flex justify-center"><Loader2 className="animate-spin text-orange-500" size={32} /></div> : (
-              <>
-                <div className="bg-orange-50 border border-orange-100 rounded-2xl p-4 mb-3 flex items-center justify-between shrink-0">
-                  <div><p className="text-xs font-bold text-orange-600 mb-0.5">나의 수집 진행도</p><p className="text-sm font-black text-stone-800"><span className="text-orange-500 text-xl">{totalCollectedBadges}</span> / {totalBadgesCount}개</p></div>
-                  <div className="text-right"><p className="text-[11px] text-stone-500 font-medium">Locked</p><p className="text-sm font-bold text-stone-700">🔒 {lockedBadgesCount}개</p></div>
-                </div>
-                <div className="flex border-b border-stone-100 mb-4 shrink-0">
-                  <button onClick={() => setBadgeTab("general")} className={`flex-1 pb-2 font-bold text-sm border-b-2 ${badgeTab === "general" ? "border-orange-500 text-orange-500" : "border-transparent text-stone-400"} cursor-pointer`}>🏆 미식가 등급</button>
-                  <button onClick={() => setBadgeTab("category")} className={`flex-1 pb-2 font-bold text-sm border-b-2 ${badgeTab === "category" ? "border-orange-500 text-orange-500" : "border-transparent text-stone-400"} cursor-pointer`}>🏷️ 카테고리 뱃지</button>
-                </div>
-                <div className="overflow-y-auto scrollbar-hide flex-1 pb-4 space-y-3">
-                  {badgeTab === "general" ? GENERAL_BADGES.map((b, i) => {
-                    const isUnlocked = badgeStats.total >= b.threshold;
-                    const isSelected = displayBadge.title === b.title;
-                    return (
-                      <div key={i} onClick={() => isUnlocked && handleSelectBadge(b, 'general')} className={`flex items-center gap-4 p-3 rounded-2xl border ${isUnlocked ? (isSelected ? 'border-orange-500 bg-orange-50 ring-2 ring-orange-200 cursor-pointer' : `${b.bg} cursor-pointer`) : 'bg-stone-50 border-stone-100 grayscale opacity-40'}`}>
-                        <div className="text-3xl shrink-0 w-12 text-center">{isUnlocked ? b.icon : "🔒"}</div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex justify-between items-center mb-0.5"><span className={`font-black text-sm ${isUnlocked ? b.color : 'text-stone-500'}`}>{b.title}</span>{isUnlocked && isSelected && <Check size={16} className="text-orange-500" />}</div>
-                          <p className="text-[11px] text-stone-500 truncate">{b.desc}</p>
-                          <p className="text-[10px] font-bold text-stone-400 mt-1 bg-stone-100 inline-block px-1.5 py-0.5 rounded">🔒 목표: 총 {b.threshold}곳 저장</p>
-                        </div>
-                      </div>
-                    );
-                  }) : Object.entries(CATEGORY_BADGES).map(([cat, badges]) => (
-                    <div key={cat}>
-                      <h4 className="font-extrabold text-stone-700 mb-3 flex justify-between border-b border-stone-100 pb-2"><span>{cat} 영역</span><span className="text-xs bg-stone-100 text-stone-500 px-2 py-1 rounded-lg">누적 {badgeStats.categories[cat] || 0}곳</span></h4>
-                      <div className="grid gap-2">
-                        {badges.map((b: any) => {
-                          const isUnlocked = (badgeStats.categories[cat] || 0) >= b.threshold;
-                          const isSelected = displayBadge.title === b.title;
-                          return (
-                            <div key={b.title} onClick={() => isUnlocked && handleSelectBadge(b, 'category')} className={`flex items-center gap-3 p-3 rounded-2xl border ${isUnlocked ? (isSelected ? 'border-orange-500 bg-orange-50 ring-2 ring-orange-200 cursor-pointer' : 'bg-white border-orange-100 cursor-pointer') : 'bg-stone-50 border-stone-100 grayscale opacity-40'}`}>
-                              <div className="text-2xl shrink-0 w-10 text-center">{isUnlocked ? b.icon : "🔒"}</div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex justify-between items-center mb-0.5"><span className="font-bold text-sm text-stone-800">{b.title}</span>{isUnlocked && isSelected && <Check size={16} className="text-orange-500" />}</div>
-                                <p className="text-[11px] text-stone-500 truncate">{b.desc}</p>
-                                <p className="text-[10px] font-bold text-stone-400 mt-1 bg-stone-100 inline-block px-1.5 py-0.5 rounded">🔒 목표: {cat} {b.threshold}곳 저장</p>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {isAuthModalOpen && (
-        <div className="fixed inset-0 z-[210] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <div className="relative bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in-95">
-            <div className="flex justify-end mb-2"><button onClick={() => { setIsAuthModalOpen(false); setAuthError(""); setResetMessage(""); }} className="p-1.5 rounded-full bg-stone-100 cursor-pointer"><X size={18} /></button></div>
-            {authMode === "reset" ? (
-              <>
-                <div className="text-center mb-6"><div className="inline-flex bg-orange-100 p-3 rounded-full text-orange-500 mb-3"><Lock size={28} /></div><h3 className="text-xl font-black mb-2">비밀번호 재설정</h3></div>
-                <form onSubmit={handlePasswordReset} className="space-y-4">
-                  <input type="email" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} required placeholder="이메일 주소" className="w-full py-3 px-4 bg-stone-50 rounded-xl border border-stone-200" />
-                  {authError && <p className="text-xs text-red-500 text-center">{authError}</p>}
-                  <button type="submit" className="w-full bg-orange-500 text-white font-bold py-3.5 rounded-xl cursor-pointer">재설정 메일 보내기</button>
-                  <button type="button" onClick={() => setAuthMode("login")} className="w-full text-sm font-bold text-stone-400 cursor-pointer">로그인으로 돌아가기</button>
-                </form>
-              </>
-            ) : (
-              <>
-                <div className="text-center mb-6"><div className="inline-flex bg-orange-100 p-3 rounded-full text-orange-500 mb-3"><ChefHat size={28} /></div><h3 className="text-xl font-black mb-2">나만의 맛집 지도 만들기</h3></div>
-                <div className="flex p-1 bg-stone-100 rounded-xl mb-6">
-                  <button onClick={() => setAuthMode("login")} className={`flex-1 py-2 text-sm font-bold rounded-lg cursor-pointer ${authMode === "login" ? "bg-white shadow-sm" : "text-stone-400"}`}>로그인</button>
-                  <button onClick={() => setAuthMode("signup")} className={`flex-1 py-2 text-sm font-bold rounded-lg cursor-pointer ${authMode === "signup" ? "bg-white shadow-sm" : "text-stone-400"}`}>회원가입</button>
-                </div>
-                <form onSubmit={handleEmailAuth} className="space-y-4">
-                  <input type="email" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} required placeholder="이메일 주소" className="w-full py-3 px-4 bg-stone-50 rounded-xl border border-stone-200" />
-                  <input type={showPassword ? "text" : "password"} value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} required placeholder="비밀번호" className="w-full py-3 px-4 bg-stone-50 rounded-xl border border-stone-200" />
-                  {authError && <p className="text-xs text-red-500 text-center">{authError}</p>}
-                  <button type="submit" className="w-full bg-stone-800 text-white font-bold py-3.5 rounded-xl cursor-pointer">{authMode === "login" ? "로그인" : "가입하기"}</button>
-                </form>
-                <div className="relative my-6 flex items-center py-2"><div className="flex-grow border-t border-stone-200"></div><span className="mx-4 text-stone-400 text-xs">또는</span><div className="flex-grow border-t border-stone-200"></div></div>
-                <button onClick={handleGoogleLogin} className="w-full flex items-center justify-center gap-2 bg-white border border-stone-200 font-bold py-3.5 rounded-xl shadow-sm cursor-pointer">구글로 시작하기</button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
+      {/* 영수증 및 공유 관련 모달들 (z-[250]) */}
       {shareReview && (
         <div className="fixed inset-0 z-[250] flex items-center justify-center p-0 sm:p-6" onClick={() => setShareReview(null)}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
