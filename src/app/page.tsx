@@ -121,6 +121,28 @@ interface Review {
 }
 
 export default function Home() {
+
+  // 🌟 (버그 수정 2) 카카오톡 인앱 브라우저 감지 시 최우선으로 강제 탈출 스크립트 실행
+  if (typeof window !== "undefined") {
+    const userAgent = navigator.userAgent.toLowerCase();
+    if (userAgent.includes("kakaotalk")) {
+      window.location.href = `kakaotalk://web/openExternal?url=${encodeURIComponent(window.location.href)}`;
+      return (
+        <div className="min-h-screen bg-stone-900 flex flex-col items-center justify-center text-white p-6 z-[9999] fixed inset-0">
+          <span className="text-5xl mb-4">🚀</span>
+          <p className="font-bold text-xl mb-3">기본 브라우저로 이동 중입니다!</p>
+          <div className="bg-stone-800 p-5 rounded-2xl border border-stone-700 text-center">
+            <p className="text-sm text-stone-300 break-keep leading-relaxed">
+              로그인 상태 유지를 위해 안전한 브라우저로 이동합니다.<br />
+              자동으로 화면이 넘어가지 않는다면 우측 하단의<br />
+              <span className="text-orange-500 font-bold px-1">⋮ 버튼</span>을 눌러 <span className="text-orange-500 font-bold px-1">'다른 브라우저로 열기'</span>를 선택해주세요.
+            </p>
+          </div>
+        </div>
+      );
+    }
+  }
+
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -197,7 +219,6 @@ export default function Home() {
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [activeBadge, setActiveBadge] = useState<{ icon: string, title: string, color: string, bg: string } | null>(null);
 
-  // 🌟 Phase 2.2 틴더(스와이프) State
   const [tinderState, setTinderState] = useState<'idle' | 'setup' | 'share_room' | 'playing' | 'leaderboard' | 'final_menu'>('idle');
   const [tinderRoomId, setTinderRoomId] = useState<string | null>(null);
   const [tinderMode, setTinderMode] = useState<'menu' | 'restaurant'>('menu');
@@ -254,30 +275,12 @@ export default function Home() {
   const myName = user ? profileNickname : guestId;
   const isHost = roomData?.hostUid === myId;
 
-  // 🌟 (버그 수정) 틴더 클린 종료 함수
   const closeTinderFlow = () => {
-    setTinderState('idle');
-    setTinderRoomId(null);
-    setRoomData(null);
-    setHasVoted(false);
-    setCurrentTinderIndex(0);
-    setLikedTinderItems([]);
-    setRoomLeaderboard([]);
-    setSwipeDirection(null);
-    setTouchCurrentX(0);
-    setTinderFinalPick(0);
+    setTinderState('idle'); setTinderRoomId(null); setRoomData(null); setHasVoted(false);
+    setCurrentTinderIndex(0); setLikedTinderItems([]); setRoomLeaderboard([]);
+    setSwipeDirection(null); setTouchCurrentX(0); setTinderFinalPick(0);
     window.history.replaceState({}, document.title, window.location.pathname);
   };
-
-  // 🌟 (버그 수정) 카카오톡 인앱 브라우저 강제 외부 호출 (로그인 세션 유지용)
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const userAgent = navigator.userAgent.toLowerCase();
-      if (userAgent.includes("kakaotalk")) {
-        window.location.href = `kakaotalk://web/openExternal?url=${encodeURIComponent(window.location.href)}`;
-      }
-    }
-  }, []);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -295,7 +298,7 @@ export default function Home() {
     return () => unsubscribe();
   }, []);
 
-  // 🌟 (버그 수정) 인증 확인이 끝난 뒤에 URL을 체크해서 익명유저/로그인유저 분기 완벽 처리
+  // 🌟 (버그 수정 1) 파라미터 체크 & 방 입장 로직을 단일화하여 중복 렌더 및 튕김 완벽 차단!
   useEffect(() => {
     if (typeof window === "undefined" || authLoading || !myName) return;
 
@@ -320,7 +323,7 @@ export default function Home() {
       };
       fetchSharedReview();
     }
-  }, [authLoading, myName]); // myName과 authLoading에 의존성 부여
+  }, [authLoading, myName]);
 
   const joinRoom = async (roomId: string) => {
     try {
@@ -328,9 +331,7 @@ export default function Home() {
       const roomDoc = await getDoc(roomRef);
       if (roomDoc.exists()) {
         const rData = roomDoc.data();
-        if (rData.status !== 'closed') {
-          await updateDoc(roomRef, { participants: arrayUnion(myName) });
-        }
+        if (rData.status !== 'closed') { await updateDoc(roomRef, { participants: arrayUnion(myName) }); }
         setTinderRoomId(roomId); setTinderMode(rData.mode); setTinderItems(rData.items || []);
         setCurrentTinderIndex(0); setLikedTinderItems([]); setTinderFinalPick(0);
         const voteDoc = await getDoc(doc(db, "rooms", roomId, "votes", myId));
@@ -342,23 +343,16 @@ export default function Home() {
     } catch (e) { console.error(e); }
   };
 
-  // 🌟 (버그 수정) 상태 전이(라우팅)의 허점을 막은 코드
   useEffect(() => {
     if (!tinderRoomId) return;
     const unsub = onSnapshot(doc(db, "rooms", tinderRoomId), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setRoomData(data);
-
         setTinderState((prevState) => {
-          // 링크로 처음 들어온 경우(idle)도 대기방(share_room)으로 열리게 허용!
           if (data.status === 'waiting' && (prevState === 'setup' || prevState === 'idle')) return 'share_room';
-          if (data.status === 'playing' && (prevState === 'setup' || prevState === 'share_room' || prevState === 'idle')) {
-            return hasVoted ? 'leaderboard' : 'playing';
-          }
-          if (data.status === 'closed' && (prevState === 'setup' || prevState === 'share_room' || prevState === 'playing' || prevState === 'idle')) {
-            return 'leaderboard';
-          }
+          if (data.status === 'playing' && (prevState === 'setup' || prevState === 'share_room' || prevState === 'idle')) { return hasVoted ? 'leaderboard' : 'playing'; }
+          if (data.status === 'closed' && (prevState === 'setup' || prevState === 'share_room' || prevState === 'playing' || prevState === 'idle')) { return 'leaderboard'; }
           return prevState;
         });
       }
@@ -777,6 +771,8 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#FFFDF6] text-stone-800 font-sans pb-20 relative">
+
+      {/* 1. 고정 헤더 */}
       <header className="fixed top-0 left-0 right-0 bg-white z-[100] border-b border-orange-100 shadow-md">
         <div className="max-w-md mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -801,7 +797,9 @@ export default function Home() {
         </div>
       </header>
 
+      {/* 2. 메인 컨텐츠 영역 */}
       <div className="max-w-md mx-auto px-6 pt-24 pb-20 space-y-8 relative z-10">
+
         {user && !authLoading && (
           <div onClick={openBadgeModal} className="bg-white rounded-3xl p-5 shadow-sm border border-orange-100 flex items-center justify-between cursor-pointer relative z-20">
             <div className="flex items-center gap-4">
@@ -995,7 +993,9 @@ export default function Home() {
         </section>
       </div>
 
-      {/* 🌟 틴더 기능 영역 */}
+      {/* ============================================================== */}
+      {/* 3. 틴더 기능 전체 모달 (z-[200]) */}
+      {/* ============================================================== */}
       {tinderState !== 'idle' && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-stone-900/95 backdrop-blur-md overflow-hidden p-4">
 
@@ -1062,18 +1062,20 @@ export default function Home() {
 
               <div className="shrink-0">
                 {isHost ? (
-                  (roomData.participants?.length || 0) >= 2 ? (
-                    <button
-                      onClick={() => updateDoc(doc(db, "rooms", tinderRoomId!), { status: 'playing' })}
-                      className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black py-3.5 rounded-xl shadow-md transition-colors text-sm cursor-pointer"
-                    >
-                      🚀 {roomData.participants?.length}명 투표 시작하기
-                    </button>
-                  ) : (
-                    <button disabled className="w-full bg-stone-200 text-stone-400 font-black py-3.5 rounded-xl text-[13px] cursor-not-allowed">
-                      최소 2명 이상 참여해야 시작 가능합니다
-                    </button>
-                  )
+                  <button
+                    onClick={() => {
+                      if ((roomData.participants?.length || 0) < 2) {
+                        alert("최소 2명 이상 접속해야 투표를 시작할 수 있습니다!"); return;
+                      }
+                      updateDoc(doc(db, "rooms", tinderRoomId!), { status: 'playing' });
+                    }}
+                    className={`w-full font-black py-3.5 rounded-xl shadow-md transition-colors text-sm ${(roomData.participants?.length || 0) >= 2
+                        ? 'bg-orange-500 hover:bg-orange-600 text-white cursor-pointer'
+                        : 'bg-stone-200 text-stone-400 cursor-not-allowed'
+                      }`}
+                  >
+                    {(roomData.participants?.length || 0) >= 2 ? `🚀 ${roomData.participants?.length}명 투표 시작하기` : "최소 2명 이상 참여해야 시작 가능"}
+                  </button>
                 ) : (
                   <div className="bg-stone-50 p-3.5 rounded-xl">
                     <p className="text-xs font-bold text-stone-500 flex items-center justify-center gap-2"><Loader2 className="animate-spin text-stone-400" size={14} /> 방장의 시작을 기다리는 중...</p>
@@ -1183,9 +1185,9 @@ export default function Home() {
                         key={idx}
                         onClick={() => { if (isSelectable) setTinderFinalPick(idx); }}
                         className={`flex items-center gap-3 p-3 rounded-2xl border transition-all ${isSelectable && isSelected ? 'bg-orange-50 border-orange-500 shadow-md ring-2 ring-orange-200 cursor-pointer'
-                          : isSelectable ? 'bg-white border-stone-200 cursor-pointer hover:border-orange-300'
-                            : isFirst ? 'bg-orange-50 border-orange-500 shadow-md'
-                              : 'bg-white border-stone-200'
+                            : isSelectable ? 'bg-white border-stone-200 cursor-pointer hover:border-orange-300'
+                              : isFirst ? 'bg-orange-50 border-orange-500 shadow-md'
+                                : 'bg-white border-stone-200'
                           }`}
                       >
                         <div className="w-5 text-center font-black text-stone-400 text-xs shrink-0">{idx + 1}</div>
@@ -1267,7 +1269,7 @@ export default function Home() {
                         </a>
                         <div className="flex flex-col items-end shrink-0 gap-1.5 ml-2">
                           <span className="text-[10px] font-extrabold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">{p.distance}m</span>
-                          <button onClick={() => handleScrapPlace(p)} className="text-[10px] font-bold bg-stone-100 text-stone-600 px-3 py-1.5 rounded-lg hover:bg-orange-500 hover:text-white transition-colors cursor-pointer">+ 저장</button>
+                          <button onClick={() => handleScrapPlace(p)} className="text-[10px] font-bold bg-orange-500 text-white px-2 py-1 rounded hover:bg-orange-600 transition-colors cursor-pointer">+ 저장</button>
                         </div>
                       </div>
                     ))}
@@ -1280,8 +1282,9 @@ export default function Home() {
       )}
 
       {/* ============================================================== */}
-      {/* 🌟 그 외 보조 모달 창들 (프로필, 친구, 영수증, 리뷰) z-210 고정 */}
+      {/* 4. 기타 보조 모달 창들 (프로필, 친구, 영수증, 리뷰) z-210 고정 */}
       {/* ============================================================== */}
+
       {isProfileModalOpen && (
         <div className="fixed inset-0 z-[210] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsProfileModalOpen(false)} />
@@ -1341,6 +1344,63 @@ export default function Home() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {isBadgeModalOpen && (
+        <div className="fixed inset-0 z-[210] flex items-center justify-center p-4" onClick={() => setIsBadgeModalOpen(false)}>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          <div className="relative bg-white w-full max-w-sm rounded-3xl p-5 shadow-2xl max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4 shrink-0"><h3 className="text-xl font-black flex items-center gap-2"><Star className="text-orange-500 fill-orange-500" size={20} /> 내 뱃지 도감</h3><button onClick={() => setIsBadgeModalOpen(false)} className="p-1.5 rounded-full bg-stone-100 cursor-pointer"><X size={18} /></button></div>
+            {isLoadingBadges ? <div className="py-20 flex justify-center"><Loader2 className="animate-spin text-orange-500" size={32} /></div> : (
+              <>
+                <div className="bg-orange-50 border border-orange-100 rounded-2xl p-4 mb-3 flex items-center justify-between shrink-0">
+                  <div><p className="text-xs font-bold text-orange-600 mb-0.5">나의 수집 진행도</p><p className="text-sm font-black text-stone-800"><span className="text-orange-500 text-xl">{totalCollectedBadges}</span> / {totalBadgesCount}개</p></div>
+                  <div className="text-right"><p className="text-[11px] text-stone-500 font-medium">Locked</p><p className="text-sm font-bold text-stone-700">🔒 {lockedBadgesCount}개</p></div>
+                </div>
+                <div className="flex border-b border-stone-100 mb-4 shrink-0">
+                  <button onClick={() => setBadgeTab("general")} className={`flex-1 pb-2 font-bold text-sm border-b-2 ${badgeTab === "general" ? "border-orange-500 text-orange-500" : "border-transparent text-stone-400"} cursor-pointer`}>🏆 미식가 등급</button>
+                  <button onClick={() => setBadgeTab("category")} className={`flex-1 pb-2 font-bold text-sm border-b-2 ${badgeTab === "category" ? "border-orange-500 text-orange-500" : "border-transparent text-stone-400"} cursor-pointer`}>🏷️ 카테고리 뱃지</button>
+                </div>
+                <div className="overflow-y-auto scrollbar-hide flex-1 pb-4 space-y-3">
+                  {badgeTab === "general" ? GENERAL_BADGES.map((b, i) => {
+                    const isUnlocked = badgeStats.total >= b.threshold;
+                    const isSelected = displayBadge.title === b.title;
+                    return (
+                      <div key={i} onClick={() => isUnlocked && handleSelectBadge(b, 'general')} className={`flex items-center gap-4 p-3 rounded-2xl border ${isUnlocked ? (isSelected ? 'border-orange-500 bg-orange-50 ring-2 ring-orange-200 cursor-pointer' : `${b.bg} cursor-pointer`) : 'bg-stone-50 border-stone-100 grayscale opacity-40'}`}>
+                        <div className="text-3xl shrink-0 w-12 text-center">{isUnlocked ? b.icon : "🔒"}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-center mb-0.5"><span className={`font-black text-sm ${isUnlocked ? b.color : 'text-stone-500'}`}>{b.title}</span>{isUnlocked && isSelected && <Check size={16} className="text-orange-500" />}</div>
+                          <p className="text-[11px] text-stone-500 truncate">{b.desc}</p>
+                          <p className="text-[10px] font-bold text-stone-400 mt-1 bg-stone-100 inline-block px-1.5 py-0.5 rounded">🔒 목표: 총 {b.threshold}곳 저장</p>
+                        </div>
+                      </div>
+                    );
+                  }) : Object.entries(CATEGORY_BADGES).map(([cat, badges]) => (
+                    <div key={cat}>
+                      <h4 className="font-extrabold text-stone-700 mb-3 flex justify-between border-b border-stone-100 pb-2"><span>{cat} 영역</span><span className="text-xs bg-stone-100 text-stone-500 px-2 py-1 rounded-lg">누적 {badgeStats.categories[cat] || 0}곳</span></h4>
+                      <div className="grid gap-2">
+                        {badges.map((b: any) => {
+                          const isUnlocked = (badgeStats.categories[cat] || 0) >= b.threshold;
+                          const isSelected = displayBadge.title === b.title;
+                          return (
+                            <div key={b.title} onClick={() => isUnlocked && handleSelectBadge(b, 'category')} className={`flex items-center gap-3 p-3 rounded-2xl border ${isUnlocked ? (isSelected ? 'border-orange-500 bg-orange-50 ring-2 ring-orange-200 cursor-pointer' : 'bg-white border-orange-100 cursor-pointer') : 'bg-stone-50 border-stone-100 grayscale opacity-40'}`}>
+                              <div className="text-2xl shrink-0 w-10 text-center">{isUnlocked ? b.icon : "🔒"}</div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex justify-between items-center mb-0.5"><span className="font-bold text-sm text-stone-800">{b.title}</span>{isUnlocked && isSelected && <Check size={16} className="text-orange-500" />}</div>
+                                <p className="text-[11px] text-stone-500 truncate">{b.desc}</p>
+                                <p className="text-[10px] font-bold text-stone-400 mt-1 bg-stone-100 inline-block px-1.5 py-0.5 rounded">🔒 목표: {cat} {b.threshold}곳 저장</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
