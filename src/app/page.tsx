@@ -19,7 +19,6 @@ import {
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
-// --- [데이터 배열 모음] ---
 const BASE_MENUS = [
   "삼겹살", "목살", "돼지갈비", "소갈비", "LA갈비", "차돌박이", "대패삼겹살", "항정살", "갈매기살", "육회", "곱창", "막창", "대창", "닭갈비", "닭발", "오리불고기",
   "김치찌개", "된장찌개", "부대찌개", "순두부찌개", "동태찌개", "청국장", "제육볶음", "오징어볶음", "낙지볶음", "쭈꾸미볶음", "비빔밥", "돌솥비빔밥", "육회비빔밥", "순대국", "뼈해장국", "감자탕", "설렁탕", "갈비탕", "곰탕", "돼지국밥", "찜닭", "닭볶음탕", "아구찜", "해물찜", "갈비찜",
@@ -123,8 +122,13 @@ interface Review {
 }
 
 // =========================================================================
-// 🌟 (개선 6) 타이핑 렉 방지용 독립 검색 모달 컴포넌트
-// 이 컴포넌트 안에서만 상태가 업데이트되므로 전체 페이지 리렌더링이 발생하지 않습니다.
+// 🌟 [중요] 여기에 기획자님의 API 키를 꼭 입력해주세요!
+// =========================================================================
+const KAKAO_JS_KEY = "6d8e9624fa45bf20fe85ee7dc75aa28d";   // 카톡 공유/초대용 (JavaScript 키)
+const KAKAO_REST_KEY = "deb0556cf6ab2cc0e38a558fd65ae01b"; // 식당 검색용 (REST API 키)
+
+// =========================================================================
+// 🌟 격리된 순수 컴포넌트들 (타이핑 렉 방지 및 재사용)
 // =========================================================================
 const PlaceSearchModal = ({ onClose, onSelectTarget, initialQuery = "" }: { onClose: () => void, onSelectTarget: (place: any) => void, initialQuery?: string }) => {
   const [query, setQuery] = useState(initialQuery);
@@ -133,29 +137,32 @@ const PlaceSearchModal = ({ onClose, onSelectTarget, initialQuery = "" }: { onCl
   const [isLoading, setIsLoading] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<any>(null);
 
+  // 0.5초 디바운스 적용
   useEffect(() => {
     const handler = setTimeout(() => { setDebouncedQuery(query); }, 500);
     return () => clearTimeout(handler);
   }, [query]);
 
+  // 키워드로 카카오 API 검색 (음식점, 카페만 필터링)
   useEffect(() => {
-    if (debouncedQuery.trim()) fetchPlaces(debouncedQuery);
-    else setResults([]);
+    if (debouncedQuery.trim()) {
+      const fetchPlaces = async () => {
+        setIsLoading(true);
+        try {
+          const res = await fetch(`https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(debouncedQuery)}&size=15`, {
+            headers: { Authorization: `KakaoAK ${KAKAO_REST_KEY}` }
+          });
+          const data = await res.json();
+          // FD6(음식점), CE7(카페) 만 추출
+          setResults((data.documents || []).filter((p: any) => ['FD6', 'CE7'].includes(p.category_group_code)));
+        } catch (e) { }
+        setIsLoading(false);
+      };
+      fetchPlaces();
+    } else {
+      setResults([]);
+    }
   }, [debouncedQuery]);
-
-  const fetchPlaces = async (q: string) => {
-    setIsLoading(true);
-    try {
-      const KAKAO_KEY = "deb0556cf6ab2cc0e38a558fd65ae01b"; // 🚨 REST API 키 필수!!
-      const res = await fetch(`https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(q)}&size=15`, {
-        headers: { Authorization: `KakaoAK ${KAKAO_KEY}` }
-      });
-      const data = await res.json();
-      // 음식점(FD6), 카페(CE7) 카테고리만 필터링
-      setResults((data.documents || []).filter((p: any) => ['FD6', 'CE7'].includes(p.category_group_code)));
-    } catch (e) { }
-    setIsLoading(false);
-  };
 
   return (
     <div className="fixed inset-0 z-[260] flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
@@ -167,9 +174,9 @@ const PlaceSearchModal = ({ onClose, onSelectTarget, initialQuery = "" }: { onCl
         </div>
         <div className="p-4 shrink-0 flex gap-2">
           <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="식당 이름을 검색하세요 (예: 마담밍 선릉)" className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500 outline-none" autoFocus />
-          <button onClick={() => fetchPlaces(query)} disabled={isLoading} className="shrink-0 bg-blue-500 text-white px-5 rounded-xl font-bold text-sm hover:bg-blue-600 transition-colors cursor-pointer flex items-center justify-center w-[70px]">
+          <div className="shrink-0 bg-blue-50 text-blue-500 px-5 rounded-xl font-bold text-sm flex items-center justify-center w-[70px]">
             {isLoading ? <Loader2 size={16} className="animate-spin" /> : "검색"}
-          </button>
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-2 scrollbar-hide">
           {results.length === 0 && query.trim() !== "" && !isLoading ? (
@@ -193,7 +200,43 @@ const PlaceSearchModal = ({ onClose, onSelectTarget, initialQuery = "" }: { onCl
   );
 };
 
+const CategorySelector = ({ value, onChange, showCustom, onToggleCustom, customValue, onCustomChange, availableCats }: any) => (
+  <div>
+    <label className="block text-sm font-semibold text-stone-600 mb-2 ml-1 flex items-center gap-1.5"><Tag size={14} />카테고리</label>
+    <div className="flex flex-wrap gap-2 mb-2">
+      {availableCats.map((cat: string) => (
+        <button key={cat} type="button" onClick={() => { onChange(cat); if (showCustom) onToggleCustom(); }} className={`text-xs font-semibold px-3 py-2 rounded-xl transition-all ${!showCustom && value === cat ? "bg-orange-500 text-white shadow-sm" : "bg-stone-100 text-stone-600"}`}>{cat}</button>
+      ))}
+      <button type="button" onClick={onToggleCustom} className={`text-xs font-semibold px-3 py-2 rounded-xl transition-all flex items-center gap-1 ${showCustom ? "bg-orange-500 text-white shadow-sm" : "bg-stone-100 text-stone-600"}`}><Plus size={12} />직접 입력</button>
+    </div>
+    {showCustom && <input type="text" value={customValue} onChange={(e) => onCustomChange(e.target.value)} placeholder="새 카테고리 입력" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 focus:ring-2 focus:ring-orange-500/50 outline-none text-sm" />}
+  </div>
+);
 
+const MultiImagePicker = ({ existingUrls = [], newPreviews = [], onSelect, onRemoveExisting, onRemoveNew }: any) => {
+  const totalCount = existingUrls.length + newPreviews.length;
+  const galleryRef = useRef<HTMLInputElement>(null); const cameraRef = useRef<HTMLInputElement>(null);
+  return (
+    <div>
+      <label className="block text-sm font-semibold text-stone-600 mb-2 ml-1 flex items-center gap-1.5"><Camera size={14} />사진 (최대 5장)</label>
+      <input type="file" accept="image/*" multiple ref={galleryRef} className="hidden" onChange={(e) => onSelect(e, totalCount)} />
+      <input type="file" accept="image/*" capture="environment" ref={cameraRef} className="hidden" onChange={(e) => onSelect(e, totalCount)} />
+      <div className="grid grid-cols-3 gap-2">
+        {existingUrls.map((src: string, i: number) => (<div key={`exist-${i}`} className="relative aspect-square rounded-xl overflow-hidden border border-stone-200"><img src={src} className="w-full h-full object-cover" /><button type="button" onClick={() => onRemoveExisting(i)} className="absolute top-1.5 right-1.5 bg-black/60 text-white p-1 rounded-full"><X size={14} /></button></div>))}
+        {newPreviews.map((src: string, i: number) => (<div key={`new-${i}`} className="relative aspect-square rounded-xl overflow-hidden border border-orange-200"><img src={src} className="w-full h-full object-cover" /><button type="button" onClick={() => onRemoveNew(i)} className="absolute top-1.5 right-1.5 bg-black/60 text-white p-1 rounded-full"><X size={14} /></button></div>))}
+        {totalCount < 5 && (
+          <><button type="button" onClick={() => galleryRef.current?.click()} className="aspect-square border-2 border-dashed border-stone-200 rounded-xl flex flex-col items-center justify-center gap-1 text-stone-400 hover:text-blue-500"><ImageIcon size={20} /><span className="text-[10px] font-bold">앨범</span></button>
+            <button type="button" onClick={() => cameraRef.current?.click()} className="aspect-square border-2 border-dashed border-stone-200 rounded-xl flex flex-col items-center justify-center gap-1 text-stone-400 hover:text-orange-500"><Camera size={20} /><span className="text-[10px] font-bold">촬영</span></button></>
+        )}
+      </div>
+    </div>
+  );
+};
+
+
+// =========================================================================
+// 🌟 메인 앱 컴포넌트 시작
+// =========================================================================
 export default function Home() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -352,7 +395,6 @@ export default function Home() {
   const myName = user ? profileNickname : guestId;
   const isHost = roomData?.hostUid === myId;
 
-  // 🌟 (버그 수정 3) 투표방 폭파 알림 및 완벽 리셋
   const handleCloseTinder = async () => {
     if (window.confirm("투표방을 나가시겠습니까?\n방장이 나갈 경우 투표방이 폭파됩니다.")) {
       if (isHost && tinderRoomId) {
@@ -368,6 +410,32 @@ export default function Home() {
     setRecommendedMenu(null); setNearbySaved([]); setNearbyExternal([]); setIsLocating(false);
     window.history.replaceState({}, document.title, window.location.pathname);
   };
+
+  // -------------------------------------------------------------
+  // Effects
+  // -------------------------------------------------------------
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const userAgent = navigator.userAgent.toLowerCase();
+      if (userAgent.includes("kakaotalk")) {
+        setIsKakaoBrowser(true);
+        window.location.href = `kakaotalk://web/openExternal?url=${encodeURIComponent(window.location.href)}`;
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (document.getElementById("kakao-sdk")) return;
+    const script = document.createElement("script");
+    script.id = "kakao-sdk";
+    script.src = "https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js";
+    script.async = true;
+    script.onload = () => {
+      const kakao = (window as any).Kakao;
+      if (kakao && !kakao.isInitialized()) kakao.init(KAKAO_JS_KEY);
+    };
+    document.head.appendChild(script);
+  }, []);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -387,7 +455,6 @@ export default function Home() {
 
   useEffect(() => {
     if (typeof window === "undefined" || authLoading || !myName) return;
-
     const params = new URLSearchParams(window.location.search);
     const roomParam = params.get("room");
     const uidParam = params.get("uid");
@@ -403,7 +470,7 @@ export default function Home() {
             sessionStorage.setItem('pendingImport', JSON.stringify(snap.data()));
             setPendingImportTrigger(p => p + 1);
           } else { alert("존재하지 않거나 삭제된 링크입니다."); }
-        } catch (error) { console.error(error); } finally {
+        } catch (error) { } finally {
           window.history.replaceState({}, document.title, window.location.pathname);
         }
       };
@@ -432,7 +499,6 @@ export default function Home() {
     }
   }, [user, authLoading, pendingImportTrigger, knownCategories]);
 
-  // 🌟 (버그 수정 1) 로그인 유저가 방에 들어올 때, 기존 익명 ID가 있다면 강제로 삭제(클렌징)
   const joinRoom = async (roomId: string) => {
     try {
       const roomRef = doc(db, "rooms", roomId);
@@ -440,7 +506,6 @@ export default function Home() {
       if (roomDoc.exists()) {
         const rData = roomDoc.data();
         if (rData.status !== 'closed' && rData.status !== 'reveal' && rData.status !== 'destroyed') {
-          // 유령 제거 및 현재 닉네임 등록
           const updates: any = { participants: arrayUnion(myName) };
           if (user && guestId) updates.participants = arrayRemove(guestId);
           await updateDoc(roomRef, updates);
@@ -450,7 +515,7 @@ export default function Home() {
         const myVotes = rData.votes?.[myId];
         setHasVoted(!!myVotes);
       } else {
-        alert("존재하지 않거나 만료된 투표방입니다.");
+        alert("존재하지 않거나 삭제된 투표방입니다.");
         closeTinderFlow();
       }
     } catch (e) { console.error(e); }
@@ -546,6 +611,9 @@ export default function Home() {
     return () => unsubs.forEach(fn => fn());
   }, [user, showGroupRecords, partnerUids, filterCategory, profileNickname, profilePhotoUrl, partnersData]);
 
+  // -------------------------------------------------------------
+  // Handlers
+  // -------------------------------------------------------------
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault(); if (!user) return; setIsSavingProfile(true);
     try {
@@ -608,9 +676,8 @@ export default function Home() {
   const searchLocationBasedPlaces = async (menu: string, lat: number, lng: number, sort: string) => {
     setIsLocating(true);
     try {
-      const KAKAO_KEY = "deb0556cf6ab2cc0e38a558fd65ae01b"; // 🚨 REST API 키 필수!!
       const res = await fetch(`https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(menu)}&y=${lat}&x=${lng}&radius=3000&size=15&sort=${sort}`, {
-        headers: { Authorization: `KakaoAK ${KAKAO_KEY}` }
+        headers: { Authorization: `KakaoAK ${KAKAO_REST_KEY}` }
       });
       const data = await res.json();
       const places = (data.documents || []).filter((p: any) => ['FD6', 'CE7'].includes(p.category_group_code));
@@ -727,12 +794,11 @@ export default function Home() {
       .then((results) => { setPreviews((prev) => [...prev, ...results]); e.target.value = ""; });
   };
 
-  // 🌟 (버그 수정 1) 확실한 카카오 SDK 호출
   const handleLobbyKakaoShare = () => {
     if (!tinderRoomId) return;
     const kakao = (window as any).Kakao;
     if (!kakao || !kakao.isInitialized()) {
-      alert("카카오톡 연결을 준비 중입니다. 잠시 후 다시 시도해주세요."); return;
+      try { kakao.init(KAKAO_JS_KEY); } catch (e) { alert("카카오톡 공유를 준비 중입니다. 잠시 후 다시 시도해주세요."); return; }
     }
     const url = `${window.location.origin}/?room=${tinderRoomId}`;
     kakao.Share.sendDefault({
@@ -742,12 +808,12 @@ export default function Home() {
     });
   };
 
-  // 🌟 (개선 4) 방장이 주변 맛집 리스트 중 직접 '최종 결정 및 공유' 버튼을 눌렀을 때
   const handleFinalResultKakaoShare = async (place: any, isSavedPlace: boolean) => {
     const kakao = (window as any).Kakao;
-    if (!kakao || !kakao.isInitialized()) { alert("카카오톡 연결 준비 중입니다."); return; }
+    if (!kakao || !kakao.isInitialized()) {
+      try { kakao.init(KAKAO_JS_KEY); } catch (e) { alert("카카오톡 연결 준비 중입니다."); return; }
+    }
 
-    // 만약 방장의 저장된 맛집이라면 내 앱으로 부르고, 일반 카카오 장소면 카카오맵으로 보냄
     const linkUrl = isSavedPlace ? `${window.location.origin}/?uid=${place.userId || user?.uid}&rid=${place.id}` : place.place_url;
     const storeName = isSavedPlace ? place.storeName : place.place_name;
 
@@ -771,12 +837,13 @@ export default function Home() {
     }, 500);
   };
 
-  // 🌟 트랙 B 최종 공유
   const handleTrackBShare = async () => {
     if (!roomData?.finalWinner) return;
     const winnerData = roomData.finalWinner.data;
     const kakao = (window as any).Kakao;
-    if (!kakao || !kakao.isInitialized()) { alert("카카오톡 연결 준비 중입니다."); return; }
+    if (!kakao || !kakao.isInitialized()) {
+      try { kakao.init(KAKAO_JS_KEY); } catch (e) { alert("카카오톡 연결 준비 중입니다."); return; }
+    }
 
     const url = `${window.location.origin}/?uid=${winnerData.userId || user?.uid}&rid=${winnerData.id}`;
     kakao.Share.sendDefault({
@@ -802,7 +869,9 @@ export default function Home() {
   const handleKakaoShare = () => {
     if (!shareReview || !user) return;
     const kakao = (window as any).Kakao;
-    if (!kakao || !kakao.isInitialized()) { alert("카카오톡 연결 준비 중입니다."); return; }
+    if (!kakao || !kakao.isInitialized()) {
+      try { kakao.init(KAKAO_JS_KEY); } catch (e) { alert("카카오톡 연결 준비 중입니다."); return; }
+    }
     const url = `${window.location.origin}/?uid=${shareReview.userId || user.uid}&rid=${shareReview.id}`;
     kakao.Share.sendDefault({
       objectType: 'feed',
@@ -917,7 +986,6 @@ export default function Home() {
     setTouchCurrentX(0);
   };
 
-  // 🌟 [추가 기능 3] 방장이 선택한 메뉴로 검색 -> 서버에 공유 (게스트 동기화)
   const searchLocationAndSync = async (menuName: string) => {
     setIsLocating(true);
     setTinderState('final_menu');
@@ -925,9 +993,8 @@ export default function Home() {
       const searchLat = roomData?.location?.lat || userLocation?.lat || 37.498095;
       const searchLng = roomData?.location?.lng || userLocation?.lng || 127.027610;
 
-      const KAKAO_KEY = "deb0556cf6ab2cc0e38a558fd65ae01b"; // 🚨 REST API 키 필수!!
       const res = await fetch(`https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(menuName)}&y=${searchLat}&x=${searchLng}&radius=3000&size=15&sort=${sortOrder}`, {
-        headers: { Authorization: `KakaoAK ${KAKAO_KEY}` }
+        headers: { Authorization: `KakaoAK ${KAKAO_REST_KEY}` }
       });
       const data = await res.json();
       const places = (data.documents || []).filter((p: any) => ['FD6', 'CE7'].includes(p.category_group_code));
@@ -942,7 +1009,6 @@ export default function Home() {
         else { if (external.length < 5) external.push(p); }
       });
 
-      // 방장의 검색 결과를 서버에 쏴서 게스트들이 똑같이 볼 수 있게 함
       await updateDoc(doc(db, "rooms", tinderRoomId!), {
         status: 'final_menu',
         nearbySaved: saved,
@@ -953,41 +1019,13 @@ export default function Home() {
     setIsLocating(false);
   };
 
-  const CategorySelector = ({ value, onChange, showCustom, onToggleCustom, customValue, onCustomChange, availableCats }: any) => (
-    <div>
-      <label className="block text-sm font-semibold text-stone-600 mb-2 ml-1 flex items-center gap-1.5"><Tag size={14} />카테고리</label>
-      <div className="flex flex-wrap gap-2 mb-2">
-        {availableCats.map((cat: string) => (
-          <button key={cat} type="button" onClick={() => { onChange(cat); if (showCustom) onToggleCustom(); }} className={`text-xs font-semibold px-3 py-2 rounded-xl transition-all ${!showCustom && value === cat ? "bg-orange-500 text-white shadow-sm" : "bg-stone-100 text-stone-600"}`}>{cat}</button>
-        ))}
-        <button type="button" onClick={onToggleCustom} className={`text-xs font-semibold px-3 py-2 rounded-xl transition-all flex items-center gap-1 ${showCustom ? "bg-orange-500 text-white shadow-sm" : "bg-stone-100 text-stone-600"}`}><Plus size={12} />직접 입력</button>
-      </div>
-      {showCustom && <input type="text" value={customValue} onChange={(e) => onCustomChange(e.target.value)} placeholder="새 카테고리 입력" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 focus:ring-2 focus:ring-orange-500/50 outline-none text-sm" />}
-    </div>
-  );
+  // -------------------------------------------------------------
+  // Render
+  // -------------------------------------------------------------
 
-  const MultiImagePicker = ({ existingUrls = [], newPreviews = [], onSelect, onRemoveExisting, onRemoveNew }: any) => {
-    const totalCount = existingUrls.length + newPreviews.length;
-    const galleryRef = useRef<HTMLInputElement>(null); const cameraRef = useRef<HTMLInputElement>(null);
-    return (
-      <div>
-        <label className="block text-sm font-semibold text-stone-600 mb-2 ml-1 flex items-center gap-1.5"><Camera size={14} />사진 (최대 5장)</label>
-        <input type="file" accept="image/*" multiple ref={galleryRef} className="hidden" onChange={(e) => onSelect(e, totalCount)} />
-        <input type="file" accept="image/*" capture="environment" ref={cameraRef} className="hidden" onChange={(e) => onSelect(e, totalCount)} />
-        <div className="grid grid-cols-3 gap-2">
-          {existingUrls.map((src: string, i: number) => (<div key={`exist-${i}`} className="relative aspect-square rounded-xl overflow-hidden border border-stone-200"><img src={src} className="w-full h-full object-cover" /><button type="button" onClick={() => onRemoveExisting(i)} className="absolute top-1.5 right-1.5 bg-black/60 text-white p-1 rounded-full"><X size={14} /></button></div>))}
-          {newPreviews.map((src: string, i: number) => (<div key={`new-${i}`} className="relative aspect-square rounded-xl overflow-hidden border border-orange-200"><img src={src} className="w-full h-full object-cover" /><button type="button" onClick={() => onRemoveNew(i)} className="absolute top-1.5 right-1.5 bg-black/60 text-white p-1 rounded-full"><X size={14} /></button></div>))}
-          {totalCount < 5 && (
-            <><button type="button" onClick={() => galleryRef.current?.click()} className="aspect-square border-2 border-dashed border-stone-200 rounded-xl flex flex-col items-center justify-center gap-1 text-stone-400 hover:text-blue-500"><ImageIcon size={20} /><span className="text-[10px] font-bold">앨범</span></button>
-              <button type="button" onClick={() => cameraRef.current?.click()} className="aspect-square border-2 border-dashed border-stone-200 rounded-xl flex flex-col items-center justify-center gap-1 text-stone-400 hover:text-orange-500"><Camera size={20} /><span className="text-[10px] font-bold">촬영</span></button></>
-          )}
-        </div>
-      </div>
-    );
-  };
+  if (isKakaoBrowser) return null;
 
-  // 🌟 (개선 8) 렌더링 최적화 적용된 리뷰 리스트
-  const RenderedReviewList = useMemo(() => {
+  const renderReviewList = () => {
     if (filteredReviews.length === 0) {
       return <div className="py-12 text-center bg-white rounded-3xl border border-stone-100"><p className="text-stone-500 font-bold mb-1">저장된 맛집이 없어요 🥲</p></div>;
     }
@@ -1032,10 +1070,7 @@ export default function Home() {
         ))}
       </div>
     );
-  }, [filteredReviews, showGroupRecords, user]);
-
-  // 카카오 브라우저면 UI 전체 숨김 처리 (기본 브라우저로 튕김)
-  if (isKakaoBrowser) return null;
+  };
 
   return (
     <main className="min-h-screen bg-[#FFFDF6] text-stone-800 font-sans pb-20 relative">
@@ -1130,7 +1165,7 @@ export default function Home() {
                                 <span className="text-[10px] text-stone-400 truncate">{p.address_name}</span>
                               </a>
                               <div className="flex flex-col items-end shrink-0 gap-1.5 ml-2">
-                                <span className="text-xs font-extrabold text-blue-600 bg-blue-50 px-2 py-1 rounded-md">{p.distance}m</span>
+                                <span className="text-xs font-extrabold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">{p.distance}m</span>
                                 {isAlreadySaved ? (
                                   <button disabled className="text-[10px] font-bold bg-stone-200 text-stone-500 px-2 py-1 rounded cursor-not-allowed">✓ 저장됨</button>
                                 ) : (
@@ -1208,7 +1243,7 @@ export default function Home() {
               )}
             </div>
 
-            {RenderedReviewList}
+            {renderReviewList()}
           </section>
         )}
 
@@ -1236,7 +1271,6 @@ export default function Home() {
         </section>
       </div>
 
-      {/* 🌟 (개선 6 적용) 완벽하게 격리된 장소 검색 모달 (타이핑 렉 방지) */}
       {isPlaceSearchModalOpen && (
         <PlaceSearchModal
           onClose={() => setIsPlaceSearchModalOpen(false)}
@@ -1248,10 +1282,10 @@ export default function Home() {
             }
             setIsPlaceSearchModalOpen(false);
           }}
+          initialQuery={placeSearchTarget === 'add' ? storeName : editStoreName}
         />
       )}
 
-      {/* 🌟 틴더 기능 전체 모달 (z-[200]) */}
       {tinderState !== 'idle' && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-stone-900/95 backdrop-blur-md overflow-hidden p-4">
 
@@ -1404,7 +1438,6 @@ export default function Home() {
             </div>
           )}
 
-          {/* 🌟 (버그 수정 3) 0표 발생 시 오직 방장에게만 [재투표] 권한 부여 */}
           {tinderState === 'leaderboard' && (
             <div className="bg-white rounded-[2rem] p-6 shadow-2xl relative w-full max-w-sm flex flex-col h-[600px] overflow-hidden animate-in zoom-in-95 text-left">
               <button onClick={handleCloseTinder} className="absolute top-5 right-5 p-1.5 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 transition-colors z-50 cursor-pointer"><X size={18} /></button>
@@ -1413,7 +1446,7 @@ export default function Home() {
                 <h2 className="text-xl font-black text-stone-800 flex items-center gap-2"><Activity size={20} className="text-rose-500" /> 실시간 투표 현황</h2>
                 <div className="flex items-center justify-between mt-1">
                   <p className="text-[10px] text-stone-400">
-                    {roomData?.status === 'closed' && isHost ? "동점 항목 중 최종 1위를 결정해주세요!" : "친구들의 투표를 실시간으로 확인하세요."}
+                    {roomData?.status === 'closed' ? "최종 결정할 항목을 선택하세요!" : "친구들의 투표를 실시간으로 확인하세요."}
                   </p>
                   <span className="bg-orange-50 text-orange-600 text-[10px] font-black px-2 py-0.5 rounded-md border border-orange-100">
                     {roomData?.completedUsers?.length || 0} / {roomData?.participants?.length || 0}명 완료
@@ -1547,6 +1580,7 @@ export default function Home() {
 
           {tinderState === 'winner_reveal' && roomData?.finalWinner && (
             <div className="bg-white rounded-[2rem] p-6 shadow-2xl relative w-full max-w-sm flex flex-col h-[600px] overflow-hidden animate-in zoom-in-95 text-center justify-center">
+              <button onClick={handleCloseTinder} className="absolute top-5 right-5 p-1.5 rounded-full bg-white/50 hover:bg-white/80 text-stone-600 transition-colors z-50 cursor-pointer backdrop-blur-sm"><X size={18} /></button>
               <div className="absolute top-0 left-0 right-0 h-4 bg-gradient-to-r from-amber-400 to-orange-500" />
 
               <PartyPopper size={56} className="mx-auto text-orange-500 mb-4 animate-bounce" />
@@ -1585,7 +1619,7 @@ export default function Home() {
                   {tinderMode === 'menu' ? (
                     <p className="text-[11px] font-bold text-stone-500 flex justify-center items-center gap-2 animate-pulse"><Loader2 className="animate-spin" size={14} /> 방장이 주변 맛집을 검색 중입니다...</p>
                   ) : (
-                    <button onClick={() => setShareReview(roomData.finalWinner.data)} className="w-full bg-stone-800 text-white font-bold py-3.5 rounded-xl text-sm">🧾 1위 식당 영수증 보기</button>
+                    <button onClick={() => setShareReview(roomData.finalWinner.data)} className="w-full bg-stone-800 text-white font-bold py-3.5 rounded-xl text-sm cursor-pointer">🧾 1위 식당 영수증 보기</button>
                   )}
                 </div>
               )}
@@ -1637,6 +1671,7 @@ export default function Home() {
                       )
                     })}
                     {(roomData?.nearbyExternal || []).map((p: any, i: number) => {
+                      const isAlreadySaved = reviews.some(r => r.placeId === p.id || (r.storeName && normalize(r.storeName).includes(normalize(p.place_name))));
                       return (
                         <div key={i} className="flex items-center justify-between bg-white border border-stone-200 rounded-xl px-3 py-3 shadow-sm group">
                           <a href={p.place_url} target="_blank" className="flex flex-col min-w-0 flex-1 cursor-pointer pr-2">
@@ -1671,7 +1706,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* 🌟 (개선 5) 로그아웃 버튼이 추가된 프로필 설정 모달 (z-210) */}
       {isProfileModalOpen && (
         <div className="fixed inset-0 z-[210] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsProfileModalOpen(false)} />
@@ -1691,7 +1725,6 @@ export default function Home() {
               </div>
               <button type="submit" disabled={isSavingProfile} className="w-full bg-stone-800 hover:bg-black text-white font-black py-4 rounded-xl shadow-lg active:scale-95 transition-all disabled:opacity-50 cursor-pointer">{isSavingProfile ? <Loader2 className="animate-spin mx-auto" /> : "프로필 저장하기"}</button>
             </form>
-            {/* 로그아웃 버튼 추가 */}
             <button type="button" onClick={() => { handleLogout(); setIsProfileModalOpen(false); }} className="w-full bg-stone-100 hover:bg-red-50 text-stone-600 hover:text-red-500 font-bold py-3.5 rounded-xl mt-3 transition-colors cursor-pointer flex justify-center items-center gap-2">
               <LogOut size={16} /> 로그아웃
             </button>
@@ -1875,7 +1908,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* 🌟 (개선 2) 영수증 하단 툴팁 및 카카오맵 검색 버튼 */}
             <div className="shrink-0 w-full p-4 bg-white border-t border-stone-100 pb-8 sm:pb-5">
               <div className="flex flex-col gap-2 w-full max-w-[300px] mx-auto">
                 <button onClick={handleKakaoShare} className="w-full bg-[#FEE500] hover:bg-[#FDD800] text-stone-900 font-black py-3.5 rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer"><MessageCircle size={18} className="fill-stone-900" /> 카카오톡으로 공유하기</button>
