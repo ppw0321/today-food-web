@@ -116,23 +116,33 @@ const getCurrentBadge = (count: number) => {
   return [...GENERAL_BADGES].reverse().find(b => count >= b.threshold) || GENERAL_BADGES[0];
 };
 
+// 🌟 (데이터 모델) placeId, placeUrl 추가
 interface Review {
   id: string; storeName: string; menu: string; rating: number; comment: string; category: string; imageUrls?: string[]; userId?: string; userPhoto?: string; userName?: string; createdAt?: any;
+  placeId?: string; placeUrl?: string; address?: string;
 }
 
 export default function Home() {
-  // 🌟 [버그 수정] 카카오톡 강제 우회 (Hooks 에러 안 나게 State로 관리)
-  const [isKakaoBrowser, setIsKakaoBrowser] = useState(false);
 
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const userAgent = navigator.userAgent.toLowerCase();
-      if (userAgent.includes("kakaotalk")) {
-        setIsKakaoBrowser(true);
-        window.location.href = `kakaotalk://web/openExternal?url=${encodeURIComponent(window.location.href)}`;
-      }
+  if (typeof window !== "undefined") {
+    const userAgent = navigator.userAgent.toLowerCase();
+    if (userAgent.includes("kakaotalk")) {
+      window.location.href = `kakaotalk://web/openExternal?url=${encodeURIComponent(window.location.href)}`;
+      return (
+        <div className="min-h-screen bg-stone-900 flex flex-col items-center justify-center text-white p-6 z-[9999] fixed inset-0">
+          <span className="text-5xl mb-4">🚀</span>
+          <p className="font-bold text-xl mb-3">기본 브라우저로 이동 중입니다!</p>
+          <div className="bg-stone-800 p-5 rounded-2xl border border-stone-700 text-center">
+            <p className="text-sm text-stone-300 break-keep leading-relaxed">
+              로그인 상태 유지를 위해 안전한 브라우저로 이동합니다.<br />
+              자동으로 화면이 넘어가지 않는다면 우측 하단의<br />
+              <span className="text-orange-500 font-bold px-1">⋮ 버튼</span>을 눌러 <span className="text-orange-500 font-bold px-1">'다른 브라우저로 열기'</span>를 선택해주세요.
+            </p>
+          </div>
+        </div>
+      );
     }
-  }, []);
+  }
 
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -172,7 +182,11 @@ export default function Home() {
   const [totalCount, setTotalCount] = useState<number>(0);
   const [knownCategories, setKnownCategories] = useState<string[]>(DEFAULT_CATEGORIES);
 
+  // 🌟 리뷰 작성 State (placeId 등 추가)
   const [storeName, setStoreName] = useState("");
+  const [placeId, setPlaceId] = useState("");
+  const [placeUrl, setPlaceUrl] = useState("");
+  const [address, setAddress] = useState("");
   const [menu, setMenu] = useState("");
   const [rating, setRating] = useState<number>(5);
   const [comment, setComment] = useState("");
@@ -185,8 +199,13 @@ export default function Home() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isScrapModalOpen, setIsScrapModalOpen] = useState(false);
+
+  // 🌟 리뷰 수정 State
   const [editingReview, setEditingReview] = useState<Review | null>(null);
   const [editStoreName, setEditStoreName] = useState("");
+  const [editPlaceId, setEditPlaceId] = useState("");
+  const [editPlaceUrl, setEditPlaceUrl] = useState("");
+  const [editAddress, setEditAddress] = useState("");
   const [editMenu, setEditMenu] = useState("");
   const [editRating, setEditRating] = useState(5);
   const [editComment, setEditComment] = useState("");
@@ -199,6 +218,13 @@ export default function Home() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [filterCategory, setFilterCategory] = useState("전체");
 
+  // 🌟 장소 검색 서브 모달 State
+  const [isPlaceSearchModalOpen, setIsPlaceSearchModalOpen] = useState(false);
+  const [placeSearchQuery, setPlaceSearchQuery] = useState("");
+  const [placeSearchResults, setPlaceSearchResults] = useState<any[]>([]);
+  const [placeSearchTarget, setPlaceSearchTarget] = useState<'add' | 'edit'>('add');
+  const [isSearchingPlace, setIsSearchingPlace] = useState(false);
+
   const [fullScreenData, setFullScreenData] = useState<{ urls: string[], currentIndex: number } | null>(null);
   const [isBadgeModalOpen, setIsBadgeModalOpen] = useState(false);
   const [badgeTab, setBadgeTab] = useState<"general" | "category">("general");
@@ -210,7 +236,6 @@ export default function Home() {
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [activeBadge, setActiveBadge] = useState<{ icon: string, title: string, color: string, bg: string } | null>(null);
 
-  // 🌟 Phase 2.3 틴더 상태
   const [tinderState, setTinderState] = useState<'idle' | 'setup' | 'share_room' | 'playing' | 'leaderboard' | 'winner_reveal' | 'final_menu'>('idle');
   const [tinderRoomId, setTinderRoomId] = useState<string | null>(null);
   const [tinderMode, setTinderMode] = useState<'menu' | 'restaurant'>('menu');
@@ -279,7 +304,6 @@ export default function Home() {
   const myName = user ? profileNickname : guestId;
   const isHost = roomData?.hostUid === myId;
 
-  // 🌟 (버그 수정 3) 닫을 때 완벽 초기화 (방 폭파 경고 포함)
   const handleCloseTinder = async () => {
     if (window.confirm("투표방을 나가시겠습니까?\n방장이 나갈 경우 투표방이 폭파됩니다.")) {
       if (isHost && tinderRoomId) {
@@ -328,7 +352,7 @@ export default function Home() {
           const snap = await getDoc(doc(db, "users", uidParam, "reviews", ridParam));
           if (snap.exists()) {
             const data = snap.data();
-            setPendingImport({ storeName: data.storeName || "", menu: data.menu || "", category: data.category || "기타", rating: Number(data.rating) || 5, comment: data.comment || "", imageUrls: data.imageUrls || (data.imageUrl ? [data.imageUrl] : []) });
+            setPendingImport({ storeName: data.storeName || "", menu: data.menu || "", category: data.category || "기타", rating: Number(data.rating) || 5, comment: data.comment || "", imageUrls: data.imageUrls || (data.imageUrl ? [data.imageUrl] : []), placeId: data.placeId || "", placeUrl: data.placeUrl || "", address: data.address || "" });
           } else { alert("존재하지 않거나 삭제된 링크입니다."); }
         } catch (error) { console.error(error); } finally {
           window.history.replaceState({}, document.title, window.location.pathname);
@@ -358,7 +382,6 @@ export default function Home() {
     } catch (e) { console.error(e); }
   };
 
-  // 🌟 (버그 수정 2) 재투표 리셋 완벽 동기화
   useEffect(() => {
     if (!tinderRoomId) return;
     const unsub = onSnapshot(doc(db, "rooms", tinderRoomId), (docSnap) => {
@@ -373,7 +396,6 @@ export default function Home() {
         setRoomData(data);
         if (data.items) setTinderItems(data.items);
 
-        // 방장이 재투표를 눌러 votes가 초기화된 경우 게스트의 hasVoted도 강제 초기화
         const myVotesInDb = data.votes?.[myId];
         if (!myVotesInDb && hasVoted) {
           setHasVoted(false); setCurrentTinderIndex(0); setLikedTinderItems([]); setTinderFinalPick(0);
@@ -449,11 +471,6 @@ export default function Home() {
     return () => unsubs.forEach(fn => fn());
   }, [user, showGroupRecords, partnerUids, filterCategory, profileNickname, profilePhotoUrl, partnersData]);
 
-  useEffect(() => {
-    const script = document.createElement("script"); script.src = "https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js"; script.async = true;
-    document.head.appendChild(script); return () => { if (document.head.contains(script)) document.head.removeChild(script); };
-  }, []);
-
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault(); if (!user) return; setIsSavingProfile(true);
     try {
@@ -513,6 +530,36 @@ export default function Home() {
     await setDoc(doc(db, "users", user.uid), { selectedBadge: { icon: badge.icon, title: badge.title, color: badge.color || "text-stone-800", bg: badge.bg || (type === 'category' ? "bg-white border-stone-200" : "bg-stone-100 border-stone-200") } }, { merge: true });
   };
 
+  // 🌟 (신규 기능) 카카오 API로 식당 직접 검색
+  const fetchPlacesFromKakao = async (query: string) => {
+    if (!query.trim()) return;
+    setIsSearchingPlace(true);
+    try {
+      const KAKAO_KEY = "deb0556cf6ab2cc0e38a558fd65ae01b"; // 🚨 REST API 키 필수!!
+      const res = await fetch(`https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(query)}&size=15`, {
+        headers: { Authorization: `KakaoAK ${KAKAO_KEY}` }
+      });
+      const data = await res.json();
+      setPlaceSearchResults(data.documents || []);
+    } catch (e) { alert("장소 검색에 실패했습니다."); }
+    setIsSearchingPlace(false);
+  };
+
+  const handleSelectSearchedPlace = (place: any) => {
+    if (placeSearchTarget === 'add') {
+      setStoreName(place.place_name);
+      setPlaceId(place.id);
+      setPlaceUrl(place.place_url);
+      setAddress(place.road_address_name || place.address_name);
+    } else {
+      setEditStoreName(place.place_name);
+      setEditPlaceId(place.id);
+      setEditPlaceUrl(place.place_url);
+      setEditAddress(place.road_address_name || place.address_name);
+    }
+    setIsPlaceSearchModalOpen(false);
+  };
+
   const executeSearchWithRoomLocation = (menuName: string) => {
     setRecommendedMenu(menuName); setIsSpinning(false); setNearbySaved([]); setNearbyExternal([]); setIsLocating(true);
     const searchLat = roomData?.location?.lat || userLocation?.lat || 37.498095;
@@ -520,6 +567,7 @@ export default function Home() {
     searchLocationBasedPlaces(menuName, searchLat, searchLng, sortOrder);
   };
 
+  // 🌟 (하이브리드 매칭) ID가 있으면 ID로 완벽 비교, 없으면 이름으로 백업 비교!
   const searchLocationBasedPlaces = async (menu: string, lat: number, lng: number, sort: string) => {
     setIsLocating(true);
     try {
@@ -530,10 +578,18 @@ export default function Home() {
       const data = await res.json();
       const places = data.documents || [];
       const saved: Review[] = []; const external: any[] = [];
+
       places.forEach((p: any) => {
-        const matched = reviews.find((r: Review) => normalize(r.storeName).includes(normalize(p.place_name)));
-        if (matched) { if (!saved.some((s: Review) => s.id === matched.id)) saved.push(matched); }
-        else { if (external.length < 5) external.push(p); }
+        const matched = reviews.find((r: Review) => {
+          if (r.placeId) return r.placeId === p.id; // 신형 데이터: 고유 ID로 100% 매칭
+          return normalize(r.storeName).includes(normalize(p.place_name)) || normalize(p.place_name).includes(normalize(r.storeName)); // 구형 데이터: 이름 매칭
+        });
+
+        if (matched) {
+          if (!saved.some((s: Review) => s.id === matched.id)) saved.push(matched);
+        } else {
+          if (external.length < 5) external.push(p);
+        }
       });
       setNearbySaved(saved); setNearbyExternal(external);
     } catch (e) { setLocationError("주변 검색 실패"); }
@@ -570,13 +626,15 @@ export default function Home() {
   };
 
   const resetForm = () => {
-    setStoreName(""); setMenu(""); setRating(5); setComment(""); setCategory("한식");
+    setStoreName(""); setPlaceId(""); setPlaceUrl(""); setAddress("");
+    setMenu(""); setRating(5); setComment(""); setCategory("한식");
     setCustomCategory(""); setShowCustomCategory(false); setImageFiles([]); setImagePreviews([]); setImportedUrls([]);
   };
 
   const handleScrapPlace = (place: any) => {
     if (!user) { setAuthMode("signup"); setIsAuthModalOpen(true); return; }
     resetForm(); setStoreName(place.place_name); setMenu(recommendedMenu || "");
+    setPlaceId(place.id); setPlaceUrl(place.place_url); setAddress(place.road_address_name || place.address_name); // 스크랩 시 ID 자동 부여
     const cat = matchedCategory || "기타";
     if (knownCategories.includes(cat)) { setCategory(cat); setShowCustomCategory(false); }
     else { setCategory("기타"); setCustomCategory(cat); setShowCustomCategory(true); }
@@ -592,7 +650,7 @@ export default function Home() {
         const storageRef = ref(storage, `users/${user.uid}/reviews/${Date.now()}_${file.name}`); await uploadBytes(storageRef, file); urls.push(await getDownloadURL(storageRef));
       }
       const finalUrls = [...importedUrls, ...urls].slice(0, 5);
-      await addDoc(collection(db, "users", user.uid, "reviews"), { storeName, menu, rating, comment, category: finalCategory, imageUrls: finalUrls, createdAt: serverTimestamp() });
+      await addDoc(collection(db, "users", user.uid, "reviews"), { storeName, menu, rating, comment, category: finalCategory, imageUrls: finalUrls, placeId, placeUrl, address, createdAt: serverTimestamp() });
       resetForm(); setIsScrapModalOpen(false);
     } catch (e) { } setIsSubmitting(false);
   };
@@ -601,6 +659,7 @@ export default function Home() {
     setEditingReview(review); setEditStoreName(review.storeName); setEditMenu(review.menu); setEditRating(review.rating);
     setEditComment(review.comment); setEditCategory(review.category); setEditCustomCategory(""); setEditShowCustomCategory(false);
     setEditExistingUrls(review.imageUrls || []); setEditImageFiles([]); setEditImagePreviews([]);
+    setEditPlaceId(review.placeId || ""); setEditPlaceUrl(review.placeUrl || ""); setEditAddress(review.address || "");
   };
 
   const handleUpdateReview = async (e: React.FormEvent) => {
@@ -611,7 +670,7 @@ export default function Home() {
       for (const file of editImageFiles) {
         const sRef = ref(storage, `users/${user.uid}/reviews/${Date.now()}_${file.name}`); await uploadBytes(sRef, file); finalUrls.push(await getDownloadURL(sRef));
       }
-      await updateDoc(doc(db, "users", user.uid, "reviews", editingReview.id), { storeName: editStoreName, menu: editMenu, rating: editRating, comment: editComment, category: finalCat, imageUrls: finalUrls.slice(0, 5) });
+      await updateDoc(doc(db, "users", user.uid, "reviews", editingReview.id), { storeName: editStoreName, menu: editMenu, rating: editRating, comment: editComment, category: finalCat, imageUrls: finalUrls.slice(0, 5), placeId: editPlaceId, placeUrl: editPlaceUrl, address: editAddress });
       setEditingReview(null);
     } catch (e) { } setIsUpdating(false);
   };
@@ -691,7 +750,6 @@ export default function Home() {
   const handleGoogleLogin = async () => { try { await signInWithPopup(auth, googleProvider); } catch (e) { } };
   const handleLogout = async () => { await signOut(auth); };
 
-  // 🌟 [버그 수정 3] 재투표 로직 - 데이터 완벽 리셋 및 대기방 회귀
   const handleRestartVote = async () => {
     if (!tinderRoomId || !isHost) return;
     let generatedItems: any[] = [];
@@ -706,9 +764,8 @@ export default function Home() {
       await updateDoc(doc(db, "rooms", tinderRoomId), {
         items: generatedItems, status: 'waiting', votes: {}, completedUsers: [], finalWinner: null
       });
-      // 로컬 강제 리셋
       setCurrentTinderIndex(0); setLikedTinderItems([]); setHasVoted(false); setTinderFinalPick(0);
-    } catch (e) { alert("재투표 시작에 실패했습니다."); }
+    } catch (e) { alert("재투표 생성에 실패했습니다."); }
   };
 
   const handleCreateRoom = async (mode: 'menu' | 'restaurant') => {
@@ -799,15 +856,8 @@ export default function Home() {
     );
   };
 
-  // =========================================================================
-  // 🌟 [최종 화면 렌더링]
-  // =========================================================================
-  if (isKakaoBrowser) return null; // 카카오톡 강제 우회 시 기존 화면 가림
-
   return (
     <main className="min-h-screen bg-[#FFFDF6] text-stone-800 font-sans pb-20 relative">
-
-      {/* 1. 헤더 (최상단 고정, z-100) */}
       <header className="fixed top-0 left-0 right-0 bg-white z-[100] border-b border-orange-100 shadow-md">
         <div className="max-w-md mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -832,7 +882,6 @@ export default function Home() {
         </div>
       </header>
 
-      {/* 2. 메인 컨텐츠 영역 (z-10, 헤더 아래 여백 pt-24) */}
       <div className="max-w-md mx-auto px-6 pt-24 pb-20 space-y-8 relative z-10">
 
         {user && !authLoading && (
@@ -880,7 +929,7 @@ export default function Home() {
                       {nearbySaved.map((r: Review) => (
                         <div key={r.id} className="flex items-center justify-between bg-orange-50 p-3 rounded-xl mb-2">
                           <div className="flex items-center gap-3 min-w-0">{r.imageUrls?.[0] && <img src={r.imageUrls[0]} className="w-10 h-10 rounded-lg object-cover" />}<div className="min-w-0"><p className="text-sm font-bold truncate">{r.storeName}</p><p className="text-[10px] text-orange-500">{r.menu}</p></div></div>
-                          <div className="flex items-center gap-1 shrink-0"><Star size={11} className="text-amber-500 fill-amber-500" /><span className="text-xs font-bold">{r.rating}.0</span></div>
+                          <div className="flex items-center gap-1 shrink-0"><Star size={11} className="text-amber-500 fill-amber-500" /><span className="text-xs font-bold text-amber-600">{r.rating}.0</span></div>
                         </div>
                       ))}
                     </div>
@@ -899,7 +948,13 @@ export default function Home() {
                             </a>
                             <div className="flex flex-col items-end shrink-0 gap-1.5 ml-2">
                               <span className="text-xs font-extrabold text-blue-600 bg-blue-50 px-2 py-1 rounded-md">{p.distance}m</span>
-                              <button onClick={() => handleScrapPlace(p)} className="text-[10px] font-bold bg-orange-500 text-white px-2 py-1 rounded hover:bg-orange-600 transition-colors cursor-pointer">+ 저장</button>
+
+                              {/* 🌟 (하이브리드 매칭) 이미 저장된 장소면 회색 [✓ 저장됨] 버튼 노출 */}
+                              {reviews.some(r => r.placeId === p.id || (r.storeName && normalize(r.storeName).includes(normalize(p.place_name)))) ? (
+                                <button disabled className="text-[10px] font-bold bg-stone-200 text-stone-500 px-2 py-1 rounded cursor-not-allowed">✓ 저장됨</button>
+                              ) : (
+                                <button onClick={() => handleScrapPlace(p)} className="text-[10px] font-bold bg-orange-500 text-white px-2 py-1 rounded hover:bg-orange-600 transition-colors cursor-pointer">+ 저장</button>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -991,7 +1046,14 @@ export default function Home() {
                     )}
                     <div className="p-5 space-y-4">
                       <div className="flex justify-between items-start">
-                        <div className="min-w-0 pr-2"><h3 className="font-bold text-lg text-stone-800 truncate">{review.storeName}</h3><p className="text-orange-500 text-sm font-semibold truncate">{review.menu} | {review.category}</p></div>
+                        <div className="min-w-0 pr-2">
+                          {/* 🌟 장소 연결 아이콘 추가 */}
+                          <h3 className="font-bold text-lg text-stone-800 truncate flex items-center gap-1.5">
+                            {review.storeName}
+                            {review.placeUrl && <a href={review.placeUrl} target="_blank" className="text-blue-500 hover:text-blue-600"><LinkIcon size={14} /></a>}
+                          </h3>
+                          <p className="text-orange-500 text-sm font-semibold truncate">{review.menu} | {review.category}</p>
+                        </div>
                         <div className="flex gap-1 shrink-0">
                           <button onClick={() => { setShareReview(review); setReceiptImageIndex(0); }} className="p-2 bg-stone-50 rounded-lg text-stone-400 hover:text-blue-500"><Share2 size={14} /></button>
                           {review.userId === user.uid && (
@@ -1014,7 +1076,16 @@ export default function Home() {
 
         <section className="bg-white rounded-3xl p-6 shadow-sm border border-orange-50 space-y-5 z-20 relative">
           <div className="flex items-center gap-2 mb-2"><Star className="text-orange-500 fill-orange-500" size={18} /><h2 className="font-bold text-stone-800">맛집 직접 기록</h2></div>
-          <input type="text" value={storeName} onChange={(e) => setStoreName(e.target.value)} placeholder="가게 이름" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 outline-none text-sm focus:ring-2 focus:ring-orange-500" />
+
+          {/* 🌟 (기능 추가 1) 장소 검색 폼 UI */}
+          <div className="flex gap-2">
+            <input type="text" value={storeName} onChange={(e) => { setStoreName(e.target.value); setPlaceId(""); setPlaceUrl(""); setAddress(""); }} required placeholder="가게 이름" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-orange-500 outline-none" />
+            <button type="button" onClick={() => { setPlaceSearchTarget('add'); setIsPlaceSearchModalOpen(true); }} className="shrink-0 bg-blue-50 text-blue-600 px-4 rounded-xl font-bold text-xs hover:bg-blue-100 transition-colors whitespace-nowrap cursor-pointer">
+              🔍 카카오맵
+            </button>
+          </div>
+          {placeId && <p className="text-[10px] text-blue-500 font-bold ml-1 -mt-3 flex items-center gap-1"><Check size={12} />카카오맵 장소가 연결되었습니다.</p>}
+
           <div className="grid grid-cols-2 gap-3">
             <input type="text" value={menu} onChange={(e) => setMenu(e.target.value)} placeholder="메뉴" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 outline-none text-sm focus:ring-2 focus:ring-orange-500" />
             <div className="flex items-center justify-center bg-stone-50 border border-stone-100 rounded-xl gap-1">
@@ -1024,9 +1095,42 @@ export default function Home() {
           <CategorySelector value={category} onChange={setCategory} showCustom={showCustomCategory} onToggleCustom={() => setShowCustomCategory(!showCustomCategory)} customValue={customCategory} onCustomChange={setCustomCategory} availableCats={knownCategories} />
           <MultiImagePicker existingUrls={[]} newPreviews={imagePreviews} onSelect={(e: any, t: number) => handleImagesSelect(e, t, setImageFiles, setImagePreviews)} onRemoveExisting={() => { }} onRemoveNew={(idx: number) => { setImageFiles(p => p.filter((_, i) => i !== idx)); setImagePreviews(p => p.filter((_, i) => i !== idx)); }} />
           <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="한줄평" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 h-24 resize-none outline-none text-sm focus:ring-2 focus:ring-orange-500" />
-          <button onClick={handleAddReview} disabled={isSubmitting} className="w-full bg-orange-500 text-white font-bold py-4 rounded-xl shadow-lg">{isSubmitting ? "저장 중..." : "기록 저장하기"}</button>
+          <button onClick={handleAddReview} disabled={isSubmitting} className="w-full bg-orange-500 text-white font-bold py-4 rounded-xl shadow-lg cursor-pointer">{isSubmitting ? "저장 중..." : "기록 저장하기"}</button>
         </section>
       </div>
+
+      {/* ============================================================== */}
+      {/* 🌟 장소 검색 서브 모달창 (z-[260]) */}
+      {/* ============================================================== */}
+      {isPlaceSearchModalOpen && (
+        <div className="fixed inset-0 z-[260] flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setIsPlaceSearchModalOpen(false)}>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="relative bg-white w-full max-w-md h-[80vh] sm:h-[600px] sm:rounded-3xl rounded-t-3xl shadow-2xl flex flex-col animate-in slide-in-from-bottom-10" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b border-stone-100 flex items-center justify-between shrink-0">
+              <h3 className="font-bold text-stone-800 flex items-center gap-2"><Search size={18} className="text-blue-500" /> 식당 찾기</h3>
+              <button onClick={() => setIsPlaceSearchModalOpen(false)} className="p-1.5 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 cursor-pointer"><X size={18} /></button>
+            </div>
+            <div className="p-4 shrink-0 flex gap-2">
+              <input type="text" value={placeSearchQuery} onChange={(e) => setPlaceSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && fetchPlacesFromKakao(placeSearchQuery)} placeholder="식당 이름을 검색하세요 (예: 마담밍 선릉)" className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+              <button onClick={() => fetchPlacesFromKakao(placeSearchQuery)} disabled={isSearchingPlace} className="shrink-0 bg-blue-500 text-white px-5 rounded-xl font-bold text-sm hover:bg-blue-600 transition-colors cursor-pointer flex items-center justify-center w-[70px]">
+                {isSearchingPlace ? <Loader2 size={16} className="animate-spin" /> : "검색"}
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-2 scrollbar-hide">
+              {placeSearchResults.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-sm text-stone-400 font-bold">검색 결과가 없습니다.</div>
+              ) : (
+                placeSearchResults.map((p, idx) => (
+                  <button key={idx} onClick={() => handleSelectSearchedPlace(p)} className="w-full text-left p-3 rounded-xl border border-stone-100 bg-white hover:bg-blue-50 hover:border-blue-200 transition-colors cursor-pointer group">
+                    <div className="font-bold text-stone-800 group-hover:text-blue-600 text-sm">{p.place_name}</div>
+                    <div className="text-[11px] text-stone-400 mt-1">{p.road_address_name || p.address_name}</div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ============================================================== */}
       {/* 3. 틴더 기능 전체 모달 (z-[200]) */}
@@ -1040,7 +1144,7 @@ export default function Home() {
 
               <div className="text-center mb-8 mt-6">
                 <Flame size={40} className="mx-auto text-rose-500 mb-3 animate-pulse" />
-                <h2 className="text-2xl font-black text-stone-800 mb-1 tracking-tight">투표방 열기</h2>
+                <h2 className="text-3xl font-black text-stone-800 mb-1 tracking-tight">투표방 열기</h2>
                 <p className="text-xs text-stone-500 font-medium">링크를 공유해서 다같이 결정하세요!</p>
               </div>
               <div className="space-y-4">
@@ -1258,9 +1362,9 @@ export default function Home() {
                             key={idx}
                             onClick={() => { if (isSelectable) setTinderFinalPick(idx); }}
                             className={`flex items-center gap-3 p-3 rounded-2xl border transition-all ${isSelectable && isSelected ? 'bg-orange-50 border-orange-500 shadow-md ring-2 ring-orange-200 cursor-pointer'
-                                : isSelectable ? 'bg-white border-stone-200 cursor-pointer hover:border-orange-300'
-                                  : isTopTier && roomData?.status === 'closed' ? 'bg-orange-50 border-orange-500 shadow-md'
-                                    : 'bg-white border-stone-200 opacity-70'
+                              : isSelectable ? 'bg-white border-stone-200 cursor-pointer hover:border-orange-300'
+                                : isTopTier && roomData?.status === 'closed' ? 'bg-orange-50 border-orange-500 shadow-md'
+                                  : 'bg-white border-stone-200 opacity-70'
                               }`}
                           >
                             <div className="w-5 text-center font-black text-stone-400 text-xs shrink-0">{idx + 1}</div>
@@ -1325,7 +1429,7 @@ export default function Home() {
 
           {tinderState === 'winner_reveal' && roomData?.finalWinner && (
             <div className="bg-white rounded-[2rem] p-6 shadow-2xl relative w-full max-w-sm flex flex-col h-[600px] overflow-hidden animate-in zoom-in-95 text-center justify-center">
-              <button onClick={closeTinderFlow} className="absolute top-5 right-5 p-1.5 rounded-full bg-white/50 hover:bg-white/80 text-stone-600 transition-colors z-50 cursor-pointer backdrop-blur-sm"><X size={18} /></button>
+              <button onClick={handleCloseTinder} className="absolute top-5 right-5 p-1.5 rounded-full bg-white/50 hover:bg-white/80 text-stone-600 transition-colors z-50 cursor-pointer backdrop-blur-sm"><X size={18} /></button>
               <div className="absolute top-0 left-0 right-0 h-4 bg-gradient-to-r from-amber-400 to-orange-500" />
 
               <PartyPopper size={56} className="mx-auto text-orange-500 mb-4 animate-bounce" />
@@ -1366,7 +1470,7 @@ export default function Home() {
               <div className="flex items-center justify-between mb-4 shrink-0 border-b border-stone-100 pb-3">
                 <h2 className="text-xl font-black text-stone-800 tracking-tight">주변 맛집 추천</h2>
               </div>
-              <button onClick={closeTinderFlow} className="absolute top-5 right-5 p-1.5 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 transition-colors z-50 cursor-pointer"><X size={18} /></button>
+              <button onClick={handleCloseTinder} className="absolute top-5 right-5 p-1.5 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 transition-colors z-50 cursor-pointer"><X size={18} /></button>
 
               <div className="flex items-center gap-3 bg-orange-50 p-3 rounded-xl mb-4 shrink-0 border border-orange-100 mt-2">
                 <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center text-xl shadow-sm">{safeIconTheme.emoji}</div>
@@ -1408,7 +1512,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* 보조 모달 창들 (프로필, 설정, 영수증 등) z-210 고정 */}
+      {/* 🌟 보조 모달 창들 (프로필, 설정, 영수증 등) z-210 고정 */}
       {isProfileModalOpen && (
         <div className="fixed inset-0 z-[210] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsProfileModalOpen(false)} />
@@ -1565,7 +1669,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* 영수증 모달 */}
+      {/* 영수증 모달 및 공유 모달 영역 */}
       {shareReview && (
         <div className="fixed inset-0 z-[250] flex items-center justify-center p-0 sm:p-6" onClick={() => setShareReview(null)}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
@@ -1608,11 +1712,11 @@ export default function Home() {
                 <div className="absolute bottom-0 left-0 right-0 h-2 bg-transparent rotate-180" style={{ backgroundImage: "linear-gradient(-45deg, transparent 4px, white 4px), linear-gradient(45deg, transparent 4px, white 4px)", backgroundSize: "8px 8px" }} />
               </div>
             </div>
+
             <div className="shrink-0 w-full p-4 bg-white border-t border-stone-100 pb-8 sm:pb-5">
               <div className="flex flex-col gap-2 w-full max-w-[300px] mx-auto">
                 <button onClick={handleKakaoShare} className="w-full bg-[#FEE500] hover:bg-[#FDD800] text-stone-900 font-black py-3.5 rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer"><MessageCircle size={18} className="fill-stone-900" /> 카카오톡으로 공유하기</button>
 
-                {/* 🌟 (개선 5) 영수증 하단에 카카오맵 바로 검색 버튼 추가 */}
                 <a href={`https://map.kakao.com/link/search/${encodeURIComponent(shareReview.storeName)}`} target="_blank" rel="noopener noreferrer" className="w-full bg-stone-800 hover:bg-black text-white font-black py-3.5 rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer transition-colors">
                   <MapPin size={16} /> 카카오맵에서 식당 보기
                 </a>
@@ -1627,6 +1731,37 @@ export default function Home() {
         </div>
       )}
 
+      {/* 서브 모달: 장소 검색 (z-[260]) */}
+      {isPlaceSearchModalOpen && (
+        <div className="fixed inset-0 z-[260] flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setIsPlaceSearchModalOpen(false)}>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="relative bg-white w-full max-w-md h-[80vh] sm:h-[600px] sm:rounded-3xl rounded-t-3xl shadow-2xl flex flex-col animate-in slide-in-from-bottom-10" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b border-stone-100 flex items-center justify-between shrink-0">
+              <h3 className="font-bold text-stone-800 flex items-center gap-2"><Search size={18} className="text-blue-500" /> 식당 찾기</h3>
+              <button onClick={() => setIsPlaceSearchModalOpen(false)} className="p-1.5 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 cursor-pointer"><X size={18} /></button>
+            </div>
+            <div className="p-4 shrink-0 flex gap-2">
+              <input type="text" value={placeSearchQuery} onChange={(e) => setPlaceSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && fetchPlacesFromKakao(placeSearchQuery)} placeholder="식당 이름을 검색하세요 (예: 마담밍 선릉)" className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+              <button onClick={() => fetchPlacesFromKakao(placeSearchQuery)} disabled={isSearchingPlace} className="shrink-0 bg-blue-500 text-white px-5 rounded-xl font-bold text-sm hover:bg-blue-600 transition-colors cursor-pointer flex items-center justify-center w-[70px]">
+                {isSearchingPlace ? <Loader2 size={16} className="animate-spin" /> : "검색"}
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-2 scrollbar-hide">
+              {placeSearchResults.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-sm text-stone-400 font-bold">검색 결과가 없습니다.</div>
+              ) : (
+                placeSearchResults.map((p, idx) => (
+                  <button key={idx} onClick={() => handleSelectSearchedPlace(p)} className="w-full text-left p-3 rounded-xl border border-stone-100 bg-white hover:bg-blue-50 hover:border-blue-200 transition-colors cursor-pointer group">
+                    <div className="font-bold text-stone-800 group-hover:text-blue-600 text-sm">{p.place_name}</div>
+                    <div className="text-[11px] text-stone-400 mt-1">{p.road_address_name || p.address_name}</div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {isScrapModalOpen && (
         <div className="fixed inset-0 z-[250] flex items-end sm:items-center justify-center" onClick={() => setIsScrapModalOpen(false)}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
@@ -1636,7 +1771,15 @@ export default function Home() {
               <button type="button" onClick={() => setIsScrapModalOpen(false)} className="p-1.5 rounded-full bg-stone-100 cursor-pointer"><X size={18} /></button>
             </div>
             <form onSubmit={handleAddReview} className="space-y-4">
-              <input type="text" value={storeName} onChange={(e) => setStoreName(e.target.value)} required placeholder="가게 이름" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 text-sm" />
+
+              <div className="flex gap-2">
+                <input type="text" value={storeName} onChange={(e) => { setStoreName(e.target.value); setPlaceId(""); setPlaceUrl(""); setAddress(""); }} required placeholder="가게 이름" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-orange-500 outline-none" />
+                <button type="button" onClick={() => { setPlaceSearchTarget('add'); setIsPlaceSearchModalOpen(true); }} className="shrink-0 bg-blue-50 text-blue-600 px-4 rounded-xl font-bold text-xs hover:bg-blue-100 transition-colors whitespace-nowrap cursor-pointer">
+                  🔍 카카오맵
+                </button>
+              </div>
+              {placeId && <p className="text-[10px] text-blue-500 font-bold ml-1 -mt-3 flex items-center gap-1"><Check size={12} />카카오맵 장소가 연결되었습니다.</p>}
+
               <div className="grid grid-cols-2 gap-4">
                 <input type="text" value={menu} onChange={(e) => setMenu(e.target.value)} required placeholder="메뉴" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 text-sm" />
                 <div className="flex items-center justify-between bg-stone-50 border border-stone-100 rounded-xl px-3 h-[50px]">{[1, 2, 3, 4, 5].map((s) => <Star key={s} onClick={() => setRating(s)} size={22} className={`cursor-pointer ${rating >= s ? 'text-amber-400 fill-amber-400' : 'text-stone-300'}`} />)}</div>
@@ -1656,7 +1799,15 @@ export default function Home() {
           <div className="relative bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 max-h-[90vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5"><h3 className="text-lg font-bold text-stone-800 flex items-center gap-2"><Pencil size={18} className="text-orange-500" /> 맛집 수정</h3><button onClick={() => setEditingReview(null)} className="p-1.5 rounded-full bg-stone-100 cursor-pointer"><X size={18} /></button></div>
             <form onSubmit={handleUpdateReview} className="space-y-4">
-              <input type="text" value={editStoreName} onChange={(e) => setEditStoreName(e.target.value)} required className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 text-sm" />
+
+              <div className="flex gap-2">
+                <input type="text" value={editStoreName} onChange={(e) => { setEditStoreName(e.target.value); setEditPlaceId(""); setEditPlaceUrl(""); setEditAddress(""); }} required className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-orange-500 outline-none" />
+                <button type="button" onClick={() => { setPlaceSearchTarget('edit'); setIsPlaceSearchModalOpen(true); }} className="shrink-0 bg-blue-50 text-blue-600 px-4 rounded-xl font-bold text-xs hover:bg-blue-100 transition-colors whitespace-nowrap cursor-pointer">
+                  🔍 카카오맵
+                </button>
+              </div>
+              {editPlaceId && <p className="text-[10px] text-blue-500 font-bold ml-1 -mt-3 flex items-center gap-1"><Check size={12} />카카오맵 장소가 연결되었습니다.</p>}
+
               <div className="grid grid-cols-2 gap-4">
                 <input type="text" value={editMenu} onChange={(e) => setEditMenu(e.target.value)} required className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 text-sm" />
                 <div className="flex items-center justify-between bg-stone-50 border border-stone-100 rounded-xl px-3 h-[50px]">{[1, 2, 3, 4, 5].map((s) => <Star key={s} onClick={() => setEditRating(s)} size={22} className={`cursor-pointer ${editRating >= s ? 'text-amber-400 fill-amber-400' : 'text-stone-300'}`} />)}</div>
