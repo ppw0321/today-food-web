@@ -19,6 +19,7 @@ import {
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
+// --- [데이터 배열 모음] ---
 const BASE_MENUS = [
   "삼겹살", "목살", "돼지갈비", "소갈비", "LA갈비", "차돌박이", "대패삼겹살", "항정살", "갈매기살", "육회", "곱창", "막창", "대창", "닭갈비", "닭발", "오리불고기",
   "김치찌개", "된장찌개", "부대찌개", "순두부찌개", "동태찌개", "청국장", "제육볶음", "오징어볶음", "낙지볶음", "쭈꾸미볶음", "비빔밥", "돌솥비빔밥", "육회비빔밥", "순대국", "뼈해장국", "감자탕", "설렁탕", "갈비탕", "곰탕", "돼지국밥", "찜닭", "닭볶음탕", "아구찜", "해물찜", "갈비찜",
@@ -121,12 +122,79 @@ interface Review {
   placeId?: string; placeUrl?: string; address?: string;
 }
 
+// =========================================================================
+// 🌟 (개선 6) 타이핑 렉 방지용 독립 검색 모달 컴포넌트
+// 이 컴포넌트 안에서만 상태가 업데이트되므로 전체 페이지 리렌더링이 발생하지 않습니다.
+// =========================================================================
+const PlaceSearchModal = ({ onClose, onSelectTarget, initialQuery = "" }: { onClose: () => void, onSelectTarget: (place: any) => void, initialQuery?: string }) => {
+  const [query, setQuery] = useState(initialQuery);
+  const [debouncedQuery, setDebouncedQuery] = useState(initialQuery);
+  const [results, setResults] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedPlace, setSelectedPlace] = useState<any>(null);
+
+  useEffect(() => {
+    const handler = setTimeout(() => { setDebouncedQuery(query); }, 500);
+    return () => clearTimeout(handler);
+  }, [query]);
+
+  useEffect(() => {
+    if (debouncedQuery.trim()) fetchPlaces(debouncedQuery);
+    else setResults([]);
+  }, [debouncedQuery]);
+
+  const fetchPlaces = async (q: string) => {
+    setIsLoading(true);
+    try {
+      const KAKAO_KEY = "deb0556cf6ab2cc0e38a558fd65ae01b"; // 🚨 REST API 키 필수!!
+      const res = await fetch(`https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(q)}&size=15`, {
+        headers: { Authorization: `KakaoAK ${KAKAO_KEY}` }
+      });
+      const data = await res.json();
+      // 음식점(FD6), 카페(CE7) 카테고리만 필터링
+      setResults((data.documents || []).filter((p: any) => ['FD6', 'CE7'].includes(p.category_group_code)));
+    } catch (e) { }
+    setIsLoading(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[260] flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div className="relative bg-white w-full max-w-md h-[80vh] sm:h-[600px] sm:rounded-3xl rounded-t-3xl shadow-2xl flex flex-col animate-in slide-in-from-bottom-10" onClick={(e) => e.stopPropagation()}>
+        <div className="p-4 border-b border-stone-100 flex items-center justify-between shrink-0">
+          <h3 className="font-bold text-stone-800 flex items-center gap-2"><Search size={18} className="text-blue-500" /> 맛집 찾기</h3>
+          <button onClick={onClose} className="p-1.5 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 cursor-pointer"><X size={18} /></button>
+        </div>
+        <div className="p-4 shrink-0 flex gap-2">
+          <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="식당 이름을 검색하세요 (예: 마담밍 선릉)" className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500 outline-none" autoFocus />
+          <button onClick={() => fetchPlaces(query)} disabled={isLoading} className="shrink-0 bg-blue-500 text-white px-5 rounded-xl font-bold text-sm hover:bg-blue-600 transition-colors cursor-pointer flex items-center justify-center w-[70px]">
+            {isLoading ? <Loader2 size={16} className="animate-spin" /> : "검색"}
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-2 scrollbar-hide">
+          {results.length === 0 && query.trim() !== "" && !isLoading ? (
+            <div className="h-full flex items-center justify-center text-sm text-stone-400 font-bold">검색 결과가 없습니다.</div>
+          ) : (
+            results.map((p, idx) => (
+              <button key={idx} onClick={() => setSelectedPlace(p)} className={`w-full text-left p-3 rounded-xl border transition-colors cursor-pointer group ${selectedPlace?.id === p.id ? 'border-blue-500 bg-blue-50' : 'border-stone-100 bg-white hover:bg-blue-50 hover:border-blue-200'}`}>
+                <div className={`font-bold text-sm ${selectedPlace?.id === p.id ? 'text-blue-600' : 'text-stone-800 group-hover:text-blue-600'}`}>{p.place_name}</div>
+                <div className="text-[11px] text-stone-400 mt-1">{p.road_address_name || p.address_name}</div>
+              </button>
+            ))
+          )}
+        </div>
+        <div className="p-4 border-t border-stone-100 shrink-0">
+          <button disabled={!selectedPlace} onClick={() => onSelectTarget(selectedPlace)} className="w-full bg-stone-900 hover:bg-black text-white font-bold py-3.5 rounded-xl shadow-md transition-all disabled:opacity-50 cursor-pointer">
+            선택한 맛집 연동하기
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
 export default function Home() {
-
-  // 🌟 [최우선 수정] 모든 Hooks(useState 등)는 이 블록에서 가장 먼저 선언됩니다!
-  // 절대 중간에 return을 해서 Hooks 룰을 깨지 않도록 재배치했습니다.
-
-  const [isKakaoBrowser, setIsKakaoBrowser] = useState(false);
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -201,12 +269,7 @@ export default function Home() {
   const [filterCategory, setFilterCategory] = useState("전체");
 
   const [isPlaceSearchModalOpen, setIsPlaceSearchModalOpen] = useState(false);
-  const [placeSearchQuery, setPlaceSearchQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [placeSearchResults, setPlaceSearchResults] = useState<any[]>([]);
-  const [selectedPlace, setSelectedPlace] = useState<any>(null);
   const [placeSearchTarget, setPlaceSearchTarget] = useState<'add' | 'edit'>('add');
-  const [isSearchingPlace, setIsSearchingPlace] = useState(false);
 
   const [fullScreenData, setFullScreenData] = useState<{ urls: string[], currentIndex: number } | null>(null);
   const [isBadgeModalOpen, setIsBadgeModalOpen] = useState(false);
@@ -234,31 +297,7 @@ export default function Home() {
   const [touchStartX, setTouchStartX] = useState(0);
   const [touchCurrentX, setTouchCurrentX] = useState(0);
 
-  // 🌟 모든 상태 선언 완료! 이제 안전하게 useEffect 등 부수 효과를 정의합니다.
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const userAgent = navigator.userAgent.toLowerCase();
-      if (userAgent.includes("kakaotalk")) {
-        setIsKakaoBrowser(true);
-        window.location.href = `kakaotalk://web/openExternal?url=${encodeURIComponent(window.location.href)}`;
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    const script = document.createElement("script");
-    script.src = "https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js";
-    script.async = true;
-    script.onload = () => {
-      const kakao = (window as any).Kakao;
-      if (kakao && !kakao.isInitialized()) {
-        kakao.init('6d8e9624fa45bf20fe85ee7dc75aa28d');
-      }
-    };
-    document.head.appendChild(script);
-    return () => { if (document.head.contains(script)) document.head.removeChild(script); };
-  }, []);
+  const [isKakaoBrowser, setIsKakaoBrowser] = useState(false);
 
   const myReviewsCount = reviews.filter((r: Review) => r.userId === user?.uid).length;
   const displayBadge = activeBadge || getCurrentBadge(myReviewsCount);
@@ -313,6 +352,7 @@ export default function Home() {
   const myName = user ? profileNickname : guestId;
   const isHost = roomData?.hostUid === myId;
 
+  // 🌟 (버그 수정 3) 투표방 폭파 알림 및 완벽 리셋
   const handleCloseTinder = async () => {
     if (window.confirm("투표방을 나가시겠습니까?\n방장이 나갈 경우 투표방이 폭파됩니다.")) {
       if (isHost && tinderRoomId) {
@@ -392,6 +432,7 @@ export default function Home() {
     }
   }, [user, authLoading, pendingImportTrigger, knownCategories]);
 
+  // 🌟 (버그 수정 1) 로그인 유저가 방에 들어올 때, 기존 익명 ID가 있다면 강제로 삭제(클렌징)
   const joinRoom = async (roomId: string) => {
     try {
       const roomRef = doc(db, "rooms", roomId);
@@ -399,7 +440,10 @@ export default function Home() {
       if (roomDoc.exists()) {
         const rData = roomDoc.data();
         if (rData.status !== 'closed' && rData.status !== 'reveal' && rData.status !== 'destroyed') {
-          await updateDoc(roomRef, { participants: arrayUnion(myName) });
+          // 유령 제거 및 현재 닉네임 등록
+          const updates: any = { participants: arrayUnion(myName) };
+          if (user && guestId) updates.participants = arrayRemove(guestId);
+          await updateDoc(roomRef, updates);
         }
         setTinderRoomId(roomId); setTinderMode(rData.mode); setTinderItems(rData.items || []);
         setCurrentTinderIndex(0); setLikedTinderItems([]); setTinderFinalPick(0);
@@ -417,10 +461,12 @@ export default function Home() {
     const unsub = onSnapshot(doc(db, "rooms", tinderRoomId), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
+
         if (data.status === 'destroyed') {
           if (data.hostUid !== myId) alert("방장이 투표방을 종료했습니다.");
           closeTinderFlow(); return;
         }
+
         setRoomData(data);
         if (data.items) setTinderItems(data.items);
 
@@ -431,9 +477,10 @@ export default function Home() {
 
         setTinderState((prevState) => {
           if (data.status === 'waiting') return 'share_room';
-          if (data.status === 'playing') return myVotesInDb ? 'leaderboard' : 'playing';
-          if (data.status === 'closed') return 'leaderboard';
-          if (data.status === 'reveal') return 'winner_reveal';
+          if (data.status === 'playing' && prevState !== 'leaderboard' && prevState !== 'winner_reveal' && prevState !== 'final_menu') return myVotesInDb ? 'leaderboard' : 'playing';
+          if (data.status === 'closed' && prevState !== 'winner_reveal' && prevState !== 'final_menu') return 'leaderboard';
+          if (data.status === 'reveal' && prevState === 'leaderboard') return 'winner_reveal';
+          if (data.status === 'final_menu' && prevState === 'winner_reveal') return 'final_menu';
           return prevState;
         });
       }
@@ -558,49 +605,6 @@ export default function Home() {
     await setDoc(doc(db, "users", user.uid), { selectedBadge: { icon: badge.icon, title: badge.title, color: badge.color || "text-stone-800", bg: badge.bg || (type === 'category' ? "bg-white border-stone-200" : "bg-stone-100 border-stone-200") } }, { merge: true });
   };
 
-  useEffect(() => {
-    const handler = setTimeout(() => { setDebouncedQuery(placeSearchQuery); }, 500);
-    return () => clearTimeout(handler);
-  }, [placeSearchQuery]);
-
-  // 🌟 (버그 수정 2) 카카오 키워드 검색 시 오직 음식점/카페(FD6, CE7)만 가져오도록 필터링!
-  useEffect(() => {
-    if (debouncedQuery.trim()) fetchPlacesFromKakao(debouncedQuery);
-    else setPlaceSearchResults([]);
-  }, [debouncedQuery]);
-
-  const fetchPlacesFromKakao = async (query: string) => {
-    setIsSearchingPlace(true);
-    try {
-      const KAKAO_KEY = "deb0556cf6ab2cc0e38a558fd65ae01b"; // 🚨 REST API 키 필수!!
-      const res = await fetch(`https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(query)}&size=15`, {
-        headers: { Authorization: `KakaoAK ${KAKAO_KEY}` }
-      });
-      const data = await res.json();
-      const validPlaces = (data.documents || []).filter((p: any) => ['FD6', 'CE7'].includes(p.category_group_code));
-      setPlaceSearchResults(validPlaces);
-    } catch (e) { }
-    setIsSearchingPlace(false);
-  };
-
-  const handleConfirmSelectedPlace = () => {
-    if (!selectedPlace) return;
-    if (placeSearchTarget === 'add') {
-      setStoreName(selectedPlace.place_name); setPlaceId(selectedPlace.id); setPlaceUrl(selectedPlace.place_url); setAddress(selectedPlace.road_address_name || selectedPlace.address_name);
-    } else {
-      setEditStoreName(selectedPlace.place_name); setEditPlaceId(selectedPlace.id); setEditPlaceUrl(selectedPlace.place_url); setEditAddress(selectedPlace.road_address_name || selectedPlace.address_name);
-    }
-    setIsPlaceSearchModalOpen(false);
-  };
-
-  const executeSearchWithRoomLocation = (menuName: string) => {
-    setRecommendedMenu(menuName); setIsSpinning(false); setNearbySaved([]); setNearbyExternal([]); setIsLocating(true);
-    const searchLat = roomData?.location?.lat || userLocation?.lat || 37.498095;
-    const searchLng = roomData?.location?.lng || userLocation?.lng || 127.027610;
-    searchLocationBasedPlaces(menuName, searchLat, searchLng, sortOrder);
-  };
-
-  // 🌟 (버그 수정 2) 방장 기준 검색에도 음식점/카페 필터 적용!
   const searchLocationBasedPlaces = async (menu: string, lat: number, lng: number, sort: string) => {
     setIsLocating(true);
     try {
@@ -723,6 +727,7 @@ export default function Home() {
       .then((results) => { setPreviews((prev) => [...prev, ...results]); e.target.value = ""; });
   };
 
+  // 🌟 (버그 수정 1) 확실한 카카오 SDK 호출
   const handleLobbyKakaoShare = () => {
     if (!tinderRoomId) return;
     const kakao = (window as any).Kakao;
@@ -737,16 +742,61 @@ export default function Home() {
     });
   };
 
-  const handleFinalResultKakaoShare = () => {
+  // 🌟 (개선 4) 방장이 주변 맛집 리스트 중 직접 '최종 결정 및 공유' 버튼을 눌렀을 때
+  const handleFinalResultKakaoShare = async (place: any, isSavedPlace: boolean) => {
     const kakao = (window as any).Kakao;
     if (!kakao || !kakao.isInitialized()) { alert("카카오톡 연결 준비 중입니다."); return; }
-    const url = `${window.location.origin}`;
-    const titleText = tinderMode === 'menu' ? `🎉 오늘 우리의 선택은 [${recommendedMenu}]!` : `🎉 오늘의 맛집으로 결정!`;
+
+    // 만약 방장의 저장된 맛집이라면 내 앱으로 부르고, 일반 카카오 장소면 카카오맵으로 보냄
+    const linkUrl = isSavedPlace ? `${window.location.origin}/?uid=${place.userId || user?.uid}&rid=${place.id}` : place.place_url;
+    const storeName = isSavedPlace ? place.storeName : place.place_name;
+
     kakao.Share.sendDefault({
       objectType: 'feed',
-      content: { title: titleText, description: `투표가 완료되었습니다. 지금 바로 확인해보세요!`, imageUrl: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1', link: { mobileWebUrl: url, webUrl: url } },
-      buttons: [{ title: '앱으로 이동', link: { mobileWebUrl: url, webUrl: url } }],
+      content: {
+        title: `🎉 오늘의 맛집으로 결정!`,
+        description: `방장이 [${storeName}] (으)로 최종 결정했습니다!`,
+        imageUrl: isSavedPlace && place.imageUrls?.[0] ? place.imageUrls[0] : 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1',
+        link: { mobileWebUrl: linkUrl, webUrl: linkUrl }
+      },
+      buttons: [{ title: isSavedPlace ? '영수증 확인하기' : '카카오맵에서 보기', link: { mobileWebUrl: linkUrl, webUrl: linkUrl } }],
     });
+
+    if (isHost && tinderRoomId) {
+      await updateDoc(doc(db, "rooms", tinderRoomId), { status: 'destroyed' });
+    }
+    setTimeout(() => {
+      alert("카카오톡으로 최종 결과가 공유되었습니다!\n투표방을 종료합니다.");
+      closeTinderFlow();
+    }, 500);
+  };
+
+  // 🌟 트랙 B 최종 공유
+  const handleTrackBShare = async () => {
+    if (!roomData?.finalWinner) return;
+    const winnerData = roomData.finalWinner.data;
+    const kakao = (window as any).Kakao;
+    if (!kakao || !kakao.isInitialized()) { alert("카카오톡 연결 준비 중입니다."); return; }
+
+    const url = `${window.location.origin}/?uid=${winnerData.userId || user?.uid}&rid=${winnerData.id}`;
+    kakao.Share.sendDefault({
+      objectType: 'feed',
+      content: {
+        title: `🏆 오늘 우리의 최종 선택!`,
+        description: `1위로 선정된 [${winnerData.storeName}]\n지금 바로 확인해보세요!`,
+        imageUrl: winnerData.imageUrls?.[0] || 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1',
+        link: { mobileWebUrl: url, webUrl: url }
+      },
+      buttons: [{ title: '맛집 정보 보기', link: { mobileWebUrl: url, webUrl: url } }],
+    });
+
+    if (isHost && tinderRoomId) {
+      await updateDoc(doc(db, "rooms", tinderRoomId), { status: 'destroyed' });
+    }
+    setTimeout(() => {
+      alert("카카오톡으로 1위 결과가 공유되었습니다!\n투표방을 종료합니다.");
+      closeTinderFlow();
+    }, 500);
   };
 
   const handleKakaoShare = () => {
@@ -867,6 +917,42 @@ export default function Home() {
     setTouchCurrentX(0);
   };
 
+  // 🌟 [추가 기능 3] 방장이 선택한 메뉴로 검색 -> 서버에 공유 (게스트 동기화)
+  const searchLocationAndSync = async (menuName: string) => {
+    setIsLocating(true);
+    setTinderState('final_menu');
+    try {
+      const searchLat = roomData?.location?.lat || userLocation?.lat || 37.498095;
+      const searchLng = roomData?.location?.lng || userLocation?.lng || 127.027610;
+
+      const KAKAO_KEY = "deb0556cf6ab2cc0e38a558fd65ae01b"; // 🚨 REST API 키 필수!!
+      const res = await fetch(`https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(menuName)}&y=${searchLat}&x=${searchLng}&radius=3000&size=15&sort=${sortOrder}`, {
+        headers: { Authorization: `KakaoAK ${KAKAO_KEY}` }
+      });
+      const data = await res.json();
+      const places = (data.documents || []).filter((p: any) => ['FD6', 'CE7'].includes(p.category_group_code));
+      const saved: Review[] = []; const external: any[] = [];
+
+      places.forEach((p: any) => {
+        const matched = reviews.find((r: Review) => {
+          if (r.placeId) return r.placeId === p.id;
+          return normalize(r.storeName).includes(normalize(p.place_name)) || normalize(p.place_name).includes(normalize(r.storeName));
+        });
+        if (matched) { if (!saved.some((s: Review) => s.id === matched.id)) saved.push(matched); }
+        else { if (external.length < 5) external.push(p); }
+      });
+
+      // 방장의 검색 결과를 서버에 쏴서 게스트들이 똑같이 볼 수 있게 함
+      await updateDoc(doc(db, "rooms", tinderRoomId!), {
+        status: 'final_menu',
+        nearbySaved: saved,
+        nearbyExternal: external,
+        recommendedMenu: menuName
+      });
+    } catch (e) { alert("검색 동기화 실패"); }
+    setIsLocating(false);
+  };
+
   const CategorySelector = ({ value, onChange, showCustom, onToggleCustom, customValue, onCustomChange, availableCats }: any) => (
     <div>
       <label className="block text-sm font-semibold text-stone-600 mb-2 ml-1 flex items-center gap-1.5"><Tag size={14} />카테고리</label>
@@ -900,6 +986,7 @@ export default function Home() {
     );
   };
 
+  // 🌟 (개선 8) 렌더링 최적화 적용된 리뷰 리스트
   const RenderedReviewList = useMemo(() => {
     if (filteredReviews.length === 0) {
       return <div className="py-12 text-center bg-white rounded-3xl border border-stone-100"><p className="text-stone-500 font-bold mb-1">저장된 맛집이 없어요 🥲</p></div>;
@@ -929,11 +1016,11 @@ export default function Home() {
                   <p className="text-orange-500 text-sm font-semibold truncate">{review.menu} | {review.category}</p>
                 </div>
                 <div className="flex gap-1 shrink-0">
-                  <button onClick={() => { setShareReview(review); setReceiptImageIndex(0); }} className="p-2 bg-stone-50 rounded-lg text-stone-400 hover:text-blue-500"><Share2 size={14} /></button>
+                  <button onClick={() => { setShareReview(review); setReceiptImageIndex(0); }} className="p-2 bg-stone-50 rounded-lg text-stone-400 hover:text-blue-500 cursor-pointer"><Share2 size={14} /></button>
                   {review.userId === user?.uid && (
                     <>
-                      <button onClick={() => openEditModal(review)} className="p-2 bg-stone-50 rounded-lg text-stone-400 hover:text-orange-500"><Pencil size={14} /></button>
-                      <button onClick={() => handleDeleteReview(review.id)} className="p-2 bg-stone-50 rounded-lg text-stone-400 hover:text-red-500"><Trash2 size={14} /></button>
+                      <button onClick={() => openEditModal(review)} className="p-2 bg-stone-50 rounded-lg text-stone-400 hover:text-orange-500 cursor-pointer"><Pencil size={14} /></button>
+                      <button onClick={() => handleDeleteReview(review.id)} className="p-2 bg-stone-50 rounded-lg text-stone-400 hover:text-red-500 cursor-pointer"><Trash2 size={14} /></button>
                     </>
                   )}
                   <div className="flex items-center bg-amber-50 px-2 rounded-lg gap-1"><Star size={12} className="text-amber-500 fill-amber-500" /><span className="text-xs font-bold">{review.rating}.0</span></div>
@@ -946,6 +1033,9 @@ export default function Home() {
       </div>
     );
   }, [filteredReviews, showGroupRecords, user]);
+
+  // 카카오 브라우저면 UI 전체 숨김 처리 (기본 브라우저로 튕김)
+  if (isKakaoBrowser) return null;
 
   return (
     <main className="min-h-screen bg-[#FFFDF6] text-stone-800 font-sans pb-20 relative">
@@ -1127,7 +1217,7 @@ export default function Home() {
 
           <div className="flex gap-2">
             <input type="text" value={storeName} onChange={(e) => { setStoreName(e.target.value); setPlaceId(""); setPlaceUrl(""); setAddress(""); }} required placeholder="가게 이름" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-orange-500 outline-none" />
-            <button type="button" onClick={() => { setPlaceSearchTarget('add'); setPlaceSearchQuery(""); setPlaceSearchResults([]); setSelectedPlace(null); setIsPlaceSearchModalOpen(true); }} className="shrink-0 bg-blue-50 text-blue-600 px-4 rounded-xl font-bold text-xs hover:bg-blue-100 transition-colors whitespace-nowrap cursor-pointer">
+            <button type="button" onClick={() => { setPlaceSearchTarget('add'); setIsPlaceSearchModalOpen(true); }} className="shrink-0 bg-blue-50 text-blue-600 px-4 rounded-xl font-bold text-xs hover:bg-blue-100 transition-colors whitespace-nowrap cursor-pointer">
               🔍 카카오맵
             </button>
           </div>
@@ -1146,40 +1236,19 @@ export default function Home() {
         </section>
       </div>
 
-      {/* 🌟 서브 모달창: 장소 검색 (z-[260]) */}
+      {/* 🌟 (개선 6 적용) 완벽하게 격리된 장소 검색 모달 (타이핑 렉 방지) */}
       {isPlaceSearchModalOpen && (
-        <div className="fixed inset-0 z-[260] flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setIsPlaceSearchModalOpen(false)}>
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div className="relative bg-white w-full max-w-md h-[80vh] sm:h-[600px] sm:rounded-3xl rounded-t-3xl shadow-2xl flex flex-col animate-in slide-in-from-bottom-10" onClick={(e) => e.stopPropagation()}>
-            <div className="p-4 border-b border-stone-100 flex items-center justify-between shrink-0">
-              <h3 className="font-bold text-stone-800 flex items-center gap-2"><Search size={18} className="text-blue-500" /> 맛집 찾기</h3>
-              <button onClick={() => setIsPlaceSearchModalOpen(false)} className="p-1.5 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 cursor-pointer"><X size={18} /></button>
-            </div>
-            <div className="p-4 shrink-0 flex gap-2">
-              <input type="text" value={placeSearchQuery} onChange={(e) => setPlaceSearchQuery(e.target.value)} placeholder="식당 이름을 검색하세요 (예: 마담밍 선릉)" className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-              <button onClick={() => fetchPlacesFromKakao(placeSearchQuery)} disabled={isSearchingPlace} className="shrink-0 bg-blue-500 text-white px-5 rounded-xl font-bold text-sm hover:bg-blue-600 transition-colors cursor-pointer flex items-center justify-center w-[70px]">
-                {isSearchingPlace ? <Loader2 size={16} className="animate-spin" /> : "검색"}
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-2 scrollbar-hide">
-              {placeSearchResults.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-sm text-stone-400 font-bold">검색 결과가 없습니다.</div>
-              ) : (
-                placeSearchResults.map((p, idx) => (
-                  <button key={idx} onClick={() => setSelectedPlace(p)} className={`w-full text-left p-3 rounded-xl border transition-colors cursor-pointer group ${selectedPlace?.id === p.id ? 'border-blue-500 bg-blue-50' : 'border-stone-100 bg-white hover:bg-blue-50 hover:border-blue-200'}`}>
-                    <div className={`font-bold text-sm ${selectedPlace?.id === p.id ? 'text-blue-600' : 'text-stone-800 group-hover:text-blue-600'}`}>{p.place_name}</div>
-                    <div className="text-[11px] text-stone-400 mt-1">{p.road_address_name || p.address_name}</div>
-                  </button>
-                ))
-              )}
-            </div>
-            <div className="p-4 border-t border-stone-100 shrink-0">
-              <button disabled={!selectedPlace} onClick={handleConfirmSelectedPlace} className="w-full bg-stone-900 hover:bg-black text-white font-bold py-3.5 rounded-xl shadow-md transition-all disabled:opacity-50 cursor-pointer">
-                선택한 맛집 연동하기
-              </button>
-            </div>
-          </div>
-        </div>
+        <PlaceSearchModal
+          onClose={() => setIsPlaceSearchModalOpen(false)}
+          onSelectTarget={(p) => {
+            if (placeSearchTarget === 'add') {
+              setStoreName(p.place_name); setPlaceId(p.id); setPlaceUrl(p.place_url); setAddress(p.road_address_name || p.address_name);
+            } else {
+              setEditStoreName(p.place_name); setEditPlaceId(p.id); setEditPlaceUrl(p.place_url); setEditAddress(p.road_address_name || p.address_name);
+            }
+            setIsPlaceSearchModalOpen(false);
+          }}
+        />
       )}
 
       {/* 🌟 틴더 기능 전체 모달 (z-[200]) */}
@@ -1335,6 +1404,7 @@ export default function Home() {
             </div>
           )}
 
+          {/* 🌟 (버그 수정 3) 0표 발생 시 오직 방장에게만 [재투표] 권한 부여 */}
           {tinderState === 'leaderboard' && (
             <div className="bg-white rounded-[2rem] p-6 shadow-2xl relative w-full max-w-sm flex flex-col h-[600px] overflow-hidden animate-in zoom-in-95 text-left">
               <button onClick={handleCloseTinder} className="absolute top-5 right-5 p-1.5 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 transition-colors z-50 cursor-pointer"><X size={18} /></button>
@@ -1343,7 +1413,7 @@ export default function Home() {
                 <h2 className="text-xl font-black text-stone-800 flex items-center gap-2"><Activity size={20} className="text-rose-500" /> 실시간 투표 현황</h2>
                 <div className="flex items-center justify-between mt-1">
                   <p className="text-[10px] text-stone-400">
-                    {roomData?.status === 'closed' ? "최종 결정할 항목을 선택하세요!" : "친구들의 투표를 실시간으로 확인하세요."}
+                    {roomData?.status === 'closed' && isHost ? "동점 항목 중 최종 1위를 결정해주세요!" : "친구들의 투표를 실시간으로 확인하세요."}
                   </p>
                   <span className="bg-orange-50 text-orange-600 text-[10px] font-black px-2 py-0.5 rounded-md border border-orange-100">
                     {roomData?.completedUsers?.length || 0} / {roomData?.participants?.length || 0}명 완료
@@ -1477,7 +1547,6 @@ export default function Home() {
 
           {tinderState === 'winner_reveal' && roomData?.finalWinner && (
             <div className="bg-white rounded-[2rem] p-6 shadow-2xl relative w-full max-w-sm flex flex-col h-[600px] overflow-hidden animate-in zoom-in-95 text-center justify-center">
-              <button onClick={handleCloseTinder} className="absolute top-5 right-5 p-1.5 rounded-full bg-white/50 hover:bg-white/80 text-stone-600 transition-colors z-50 cursor-pointer backdrop-blur-sm"><X size={18} /></button>
               <div className="absolute top-0 left-0 right-0 h-4 bg-gradient-to-r from-amber-400 to-orange-500" />
 
               <PartyPopper size={56} className="mx-auto text-orange-500 mb-4 animate-bounce" />
@@ -1498,18 +1567,28 @@ export default function Home() {
                 )}
               </div>
 
-              <button
-                onClick={() => {
-                  if (tinderMode === 'menu') {
-                    setTinderState('final_menu'); executeSearchWithRoomLocation(roomData.finalWinner.name);
-                  } else {
-                    closeTinderFlow(); setShareReview(roomData.finalWinner.data); setReceiptImageIndex(0);
-                  }
-                }}
-                className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black py-4 rounded-xl shadow-lg active:scale-95 transition-transform text-sm cursor-pointer mt-4"
-              >
-                {tinderMode === 'menu' ? '📍 방장 위치 기준으로 주변 맛집 찾기' : '🏆 1위 식당 영수증 띄우기'}
-              </button>
+              {isHost ? (
+                <button
+                  onClick={() => {
+                    if (tinderMode === 'menu') {
+                      searchLocationAndSync(roomData.finalWinner.name);
+                    } else {
+                      handleTrackBShare();
+                    }
+                  }}
+                  className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black py-4 rounded-xl shadow-lg active:scale-95 transition-transform text-sm cursor-pointer mt-4 flex items-center justify-center gap-2"
+                >
+                  {tinderMode === 'menu' ? <><Search size={16} /> 이 메뉴로 주변 맛집 찾기</> : <><MessageCircle size={16} /> 이 식당으로 결정 (카톡 공유)</>}
+                </button>
+              ) : (
+                <div className="mt-4 p-4 bg-stone-50 rounded-xl">
+                  {tinderMode === 'menu' ? (
+                    <p className="text-[11px] font-bold text-stone-500 flex justify-center items-center gap-2 animate-pulse"><Loader2 className="animate-spin" size={14} /> 방장이 주변 맛집을 검색 중입니다...</p>
+                  ) : (
+                    <button onClick={() => setShareReview(roomData.finalWinner.data)} className="w-full bg-stone-800 text-white font-bold py-3.5 rounded-xl text-sm">🧾 1위 식당 영수증 보기</button>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -1522,7 +1601,7 @@ export default function Home() {
 
               <div className="flex items-center gap-3 bg-orange-50 p-3 rounded-xl mb-4 shrink-0 border border-orange-100 mt-2">
                 <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center text-xl shadow-sm">{safeIconTheme.emoji}</div>
-                <div><p className="text-[10px] font-bold text-orange-500">투표 1위 메뉴</p><p className="text-lg font-black text-stone-800 leading-tight">{recommendedMenu}</p></div>
+                <div><p className="text-[10px] font-bold text-orange-500">투표 1위 메뉴</p><p className="text-lg font-black text-stone-800 leading-tight">{roomData?.recommendedMenu || recommendedMenu}</p></div>
               </div>
 
               <div className="flex-1 overflow-y-auto scrollbar-hide space-y-2 pb-4">
@@ -1530,11 +1609,11 @@ export default function Home() {
                   <div className="h-full flex flex-col items-center justify-center gap-3"><Loader2 className="animate-spin text-orange-500" size={24} /><p className="text-xs font-bold text-stone-500">방장의 위치를 기준으로 맛집을 찾고 있어요...</p></div>
                 ) : locationError ? (
                   <div className="h-full flex items-center justify-center"><p className="text-xs text-red-500 font-bold bg-red-50 p-3 rounded-xl">{locationError}</p></div>
-                ) : nearbyExternal.length === 0 && nearbySaved.length === 0 ? (
+                ) : (roomData?.nearbyExternal?.length === 0 && roomData?.nearbySaved?.length === 0) ? (
                   <div className="h-full flex items-center justify-center"><p className="text-xs font-bold text-stone-400">검색된 맛집이 없습니다 🥲</p></div>
                 ) : (
                   <>
-                    {nearbySaved.map((r: Review) => {
+                    {(roomData?.nearbySaved || []).map((r: Review) => {
                       const isHostFav = r.userId === roomData?.hostUid;
                       return (
                         <div key={r.id} className="flex items-center justify-between bg-orange-50 border border-orange-100 p-3 rounded-xl">
@@ -1546,15 +1625,18 @@ export default function Home() {
                               <p className="text-[10px] text-orange-600">단골 맛집</p>
                             </div>
                           </div>
-                          <div className="flex items-center gap-1 shrink-0">
-                            <Star size={11} className="text-amber-500 fill-amber-500" /><span className="text-xs font-bold text-amber-600">{r.rating}.0</span>
-                            {isHostFav && <button onClick={() => { closeTinderFlow(); setShareReview(r); setReceiptImageIndex(0); }} className="ml-1 p-1.5 bg-white rounded-md text-stone-400 hover:text-blue-500 shadow-sm cursor-pointer"><Share2 size={12} /></button>}
+                          <div className="flex items-center gap-1 shrink-0 flex-col items-end">
+                            <div className="flex items-center"><Star size={11} className="text-amber-500 fill-amber-500 mr-1" /><span className="text-xs font-bold text-amber-600">{r.rating}.0</span></div>
+                            {isHost ? (
+                              <button onClick={() => handleFinalResultKakaoShare(r, true)} className="mt-1 text-[10px] font-bold bg-stone-800 text-white px-2 py-1 rounded cursor-pointer">이 식당으로 결정</button>
+                            ) : (
+                              <button onClick={() => setShareReview(r)} className="mt-1 text-[10px] font-bold bg-white border border-stone-200 text-stone-500 px-2 py-1 rounded cursor-pointer">영수증 보기</button>
+                            )}
                           </div>
                         </div>
                       )
                     })}
-                    {nearbyExternal.map((p: any, i: number) => {
-                      const isAlreadySaved = reviews.some(r => r.placeId === p.id || (r.storeName && normalize(r.storeName).includes(normalize(p.place_name))));
+                    {(roomData?.nearbyExternal || []).map((p: any, i: number) => {
                       return (
                         <div key={i} className="flex items-center justify-between bg-white border border-stone-200 rounded-xl px-3 py-3 shadow-sm group">
                           <a href={p.place_url} target="_blank" className="flex flex-col min-w-0 flex-1 cursor-pointer pr-2">
@@ -1563,10 +1645,10 @@ export default function Home() {
                           </a>
                           <div className="flex flex-col items-end shrink-0 gap-1.5 ml-2">
                             <span className="text-[10px] font-extrabold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">{p.distance}m</span>
-                            {isAlreadySaved ? (
-                              <button disabled className="text-[10px] font-bold bg-stone-200 text-stone-500 px-2 py-1 rounded cursor-not-allowed">✓ 저장됨</button>
+                            {isHost ? (
+                              <button onClick={() => handleFinalResultKakaoShare(p, false)} className="text-[10px] font-bold bg-stone-800 text-white px-2 py-1 rounded hover:bg-black transition-colors cursor-pointer">이 식당으로 결정</button>
                             ) : (
-                              <button onClick={() => handleScrapPlace(p)} className="text-[10px] font-bold bg-orange-500 text-white px-2 py-1 rounded hover:bg-orange-600 transition-colors cursor-pointer">+ 저장</button>
+                              <a href={p.place_url} target="_blank" className="text-[10px] font-bold bg-stone-100 text-stone-500 px-2 py-1 rounded hover:bg-stone-200 transition-colors cursor-pointer">카카오맵 보기</a>
                             )}
                           </div>
                         </div>
@@ -1576,21 +1658,20 @@ export default function Home() {
                 )}
               </div>
 
-              <div className="shrink-0 pt-4 border-t border-stone-100 mt-2">
-                <p className="text-center text-[10px] text-stone-400 mb-2">결과를 카카오톡으로 공유하고 투표를 종료하세요!</p>
-                <button onClick={() => {
-                  handleFinalResultKakaoShare();
-                  setTimeout(closeTinderFlow, 1000);
-                }} className="w-full bg-stone-900 hover:bg-black text-white font-black py-3.5 rounded-xl shadow-lg cursor-pointer flex justify-center items-center gap-2 text-sm">
-                  <MessageCircle size={16} /> 이 메뉴로 결정! (결과 공유)
-                </button>
-              </div>
+              {isHost && (
+                <div className="shrink-0 pt-4 border-t border-stone-100 mt-2">
+                  <p className="text-center text-[10px] text-stone-400 mb-2">리스트 우측의 버튼을 눌러 카톡방에 결과를 공유하세요!</p>
+                  <button onClick={handleCloseTinder} className="w-full bg-stone-100 hover:bg-stone-200 text-stone-600 font-black py-3.5 rounded-xl shadow-sm cursor-pointer text-sm">
+                    방 닫기 (투표 종료)
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
       )}
 
-      {/* 🌟 기타 보조 모달 창들 (프로필, 설정, 영수증 등) z-210 고정 */}
+      {/* 🌟 (개선 5) 로그아웃 버튼이 추가된 프로필 설정 모달 (z-210) */}
       {isProfileModalOpen && (
         <div className="fixed inset-0 z-[210] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsProfileModalOpen(false)} />
@@ -1610,6 +1691,10 @@ export default function Home() {
               </div>
               <button type="submit" disabled={isSavingProfile} className="w-full bg-stone-800 hover:bg-black text-white font-black py-4 rounded-xl shadow-lg active:scale-95 transition-all disabled:opacity-50 cursor-pointer">{isSavingProfile ? <Loader2 className="animate-spin mx-auto" /> : "프로필 저장하기"}</button>
             </form>
+            {/* 로그아웃 버튼 추가 */}
+            <button type="button" onClick={() => { handleLogout(); setIsProfileModalOpen(false); }} className="w-full bg-stone-100 hover:bg-red-50 text-stone-600 hover:text-red-500 font-bold py-3.5 rounded-xl mt-3 transition-colors cursor-pointer flex justify-center items-center gap-2">
+              <LogOut size={16} /> 로그아웃
+            </button>
           </div>
         </div>
       )}
@@ -1747,7 +1832,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* 영수증 모달 및 공유 (z-250) */}
       {shareReview && (
         <div className="fixed inset-0 z-[250] flex items-center justify-center p-0 sm:p-6" onClick={() => setShareReview(null)}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
@@ -1791,6 +1875,7 @@ export default function Home() {
               </div>
             </div>
 
+            {/* 🌟 (개선 2) 영수증 하단 툴팁 및 카카오맵 검색 버튼 */}
             <div className="shrink-0 w-full p-4 bg-white border-t border-stone-100 pb-8 sm:pb-5">
               <div className="flex flex-col gap-2 w-full max-w-[300px] mx-auto">
                 <button onClick={handleKakaoShare} className="w-full bg-[#FEE500] hover:bg-[#FDD800] text-stone-900 font-black py-3.5 rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer"><MessageCircle size={18} className="fill-stone-900" /> 카카오톡으로 공유하기</button>
@@ -1812,42 +1897,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* 서브 모달: 장소 검색 (z-[260]) */}
-      {isPlaceSearchModalOpen && (
-        <div className="fixed inset-0 z-[260] flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setIsPlaceSearchModalOpen(false)}>
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div className="relative bg-white w-full max-w-md h-[80vh] sm:h-[600px] sm:rounded-3xl rounded-t-3xl shadow-2xl flex flex-col animate-in slide-in-from-bottom-10" onClick={(e) => e.stopPropagation()}>
-            <div className="p-4 border-b border-stone-100 flex items-center justify-between shrink-0">
-              <h3 className="font-bold text-stone-800 flex items-center gap-2"><Search size={18} className="text-blue-500" /> 맛집 찾기</h3>
-              <button onClick={() => setIsPlaceSearchModalOpen(false)} className="p-1.5 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 cursor-pointer"><X size={18} /></button>
-            </div>
-            <div className="p-4 shrink-0 flex gap-2">
-              <input type="text" value={placeSearchQuery} onChange={(e) => setPlaceSearchQuery(e.target.value)} placeholder="식당 이름을 검색하세요 (예: 마담밍 선릉)" className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-              <button onClick={() => fetchPlacesFromKakao(placeSearchQuery)} disabled={isSearchingPlace} className="shrink-0 bg-blue-500 text-white px-5 rounded-xl font-bold text-sm hover:bg-blue-600 transition-colors cursor-pointer flex items-center justify-center w-[70px]">
-                {isSearchingPlace ? <Loader2 size={16} className="animate-spin" /> : "검색"}
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-2 scrollbar-hide">
-              {placeSearchResults.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-sm text-stone-400 font-bold">검색 결과가 없습니다.</div>
-              ) : (
-                placeSearchResults.map((p, idx) => (
-                  <button key={idx} onClick={() => setSelectedPlace(p)} className={`w-full text-left p-3 rounded-xl border transition-colors cursor-pointer group ${selectedPlace?.id === p.id ? 'border-blue-500 bg-blue-50' : 'border-stone-100 bg-white hover:bg-blue-50 hover:border-blue-200'}`}>
-                    <div className={`font-bold text-sm ${selectedPlace?.id === p.id ? 'text-blue-600' : 'text-stone-800 group-hover:text-blue-600'}`}>{p.place_name}</div>
-                    <div className="text-[11px] text-stone-400 mt-1">{p.road_address_name || p.address_name}</div>
-                  </button>
-                ))
-              )}
-            </div>
-            <div className="p-4 border-t border-stone-100 shrink-0">
-              <button disabled={!selectedPlace} onClick={handleConfirmSelectedPlace} className="w-full bg-stone-900 hover:bg-black text-white font-bold py-3.5 rounded-xl shadow-md transition-all disabled:opacity-50 cursor-pointer">
-                선택한 맛집 연동하기
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {isScrapModalOpen && (
         <div className="fixed inset-0 z-[250] flex items-end sm:items-center justify-center" onClick={() => setIsScrapModalOpen(false)}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
@@ -1860,7 +1909,7 @@ export default function Home() {
 
               <div className="flex gap-2">
                 <input type="text" value={storeName} onChange={(e) => { setStoreName(e.target.value); setPlaceId(""); setPlaceUrl(""); setAddress(""); }} required placeholder="가게 이름" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-orange-500 outline-none" />
-                <button type="button" onClick={() => { setPlaceSearchTarget('add'); setPlaceSearchQuery(""); setPlaceSearchResults([]); setSelectedPlace(null); setIsPlaceSearchModalOpen(true); }} className="shrink-0 bg-blue-50 text-blue-600 px-4 rounded-xl font-bold text-xs hover:bg-blue-100 transition-colors whitespace-nowrap cursor-pointer">
+                <button type="button" onClick={() => { setPlaceSearchTarget('add'); setIsPlaceSearchModalOpen(true); }} className="shrink-0 bg-blue-50 text-blue-600 px-4 rounded-xl font-bold text-xs hover:bg-blue-100 transition-colors whitespace-nowrap cursor-pointer">
                   🔍 카카오맵
                 </button>
               </div>
@@ -1888,7 +1937,7 @@ export default function Home() {
 
               <div className="flex gap-2">
                 <input type="text" value={editStoreName} onChange={(e) => { setEditStoreName(e.target.value); setEditPlaceId(""); setEditPlaceUrl(""); setEditAddress(""); }} required className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-orange-500 outline-none" />
-                <button type="button" onClick={() => { setPlaceSearchTarget('edit'); setPlaceSearchQuery(""); setPlaceSearchResults([]); setSelectedPlace(null); setIsPlaceSearchModalOpen(true); }} className="shrink-0 bg-blue-50 text-blue-600 px-4 rounded-xl font-bold text-xs hover:bg-blue-100 transition-colors whitespace-nowrap cursor-pointer">
+                <button type="button" onClick={() => { setPlaceSearchTarget('edit'); setIsPlaceSearchModalOpen(true); }} className="shrink-0 bg-blue-50 text-blue-600 px-4 rounded-xl font-bold text-xs hover:bg-blue-100 transition-colors whitespace-nowrap cursor-pointer">
                   🔍 카카오맵
                 </button>
               </div>
