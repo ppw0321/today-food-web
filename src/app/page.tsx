@@ -121,15 +121,9 @@ interface Review {
   placeId?: string; placeUrl?: string; address?: string;
 }
 
-// =========================================================================
-// 🌟 [중요] 여기에 기획자님의 API 키를 꼭 입력해주세요!
-// =========================================================================
-const KAKAO_JS_KEY = "6d8e9624fa45bf20fe85ee7dc75aa28d";   // 카톡 공유/초대용 (JavaScript 키)
-const KAKAO_REST_KEY = "deb0556cf6ab2cc0e38a558fd65ae01b"; // 식당 검색용 (REST API 키)
+const KAKAO_JS_KEY = "6d8e9624fa45bf20fe85ee7dc75aa28d";
+const KAKAO_REST_KEY = "deb0556cf6ab2cc0e38a558fd65ae01b";
 
-// =========================================================================
-// 🌟 격리된 순수 컴포넌트들 (타이핑 렉 방지 및 재사용)
-// =========================================================================
 const PlaceSearchModal = ({ onClose, onSelectTarget, initialQuery = "" }: { onClose: () => void, onSelectTarget: (place: any) => void, initialQuery?: string }) => {
   const [query, setQuery] = useState(initialQuery);
   const [debouncedQuery, setDebouncedQuery] = useState(initialQuery);
@@ -137,13 +131,11 @@ const PlaceSearchModal = ({ onClose, onSelectTarget, initialQuery = "" }: { onCl
   const [isLoading, setIsLoading] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<any>(null);
 
-  // 0.5초 디바운스 적용
   useEffect(() => {
     const handler = setTimeout(() => { setDebouncedQuery(query); }, 500);
     return () => clearTimeout(handler);
   }, [query]);
 
-  // 키워드로 카카오 API 검색 (음식점, 카페만 필터링)
   useEffect(() => {
     if (debouncedQuery.trim()) {
       const fetchPlaces = async () => {
@@ -153,7 +145,6 @@ const PlaceSearchModal = ({ onClose, onSelectTarget, initialQuery = "" }: { onCl
             headers: { Authorization: `KakaoAK ${KAKAO_REST_KEY}` }
           });
           const data = await res.json();
-          // FD6(음식점), CE7(카페) 만 추출
           setResults((data.documents || []).filter((p: any) => ['FD6', 'CE7'].includes(p.category_group_code)));
         } catch (e) { }
         setIsLoading(false);
@@ -232,11 +223,6 @@ const MultiImagePicker = ({ existingUrls = [], newPreviews = [], onSelect, onRem
     </div>
   );
 };
-
-
-// =========================================================================
-// 🌟 메인 앱 컴포넌트 시작
-// =========================================================================
 export default function Home() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -357,9 +343,18 @@ export default function Home() {
   const roomLeaderboard = useMemo(() => {
     if (!roomData || !tinderItems.length) return [];
     const counts: Record<string, number> = {};
-    Object.values(roomData.votes || {}).forEach((likes: any) => {
-      likes.forEach((id: string) => { counts[id] = (counts[id] || 0) + 1; });
+
+    tinderItems.forEach((item: any) => {
+      const id = item.type === 'menu' ? item.name : item.data.id;
+      counts[id] = 0;
     });
+
+    Object.values(roomData.votes || {}).forEach((likes: any) => {
+      likes.forEach((id: string) => {
+        if (counts[id] !== undefined) counts[id] += 1;
+      });
+    });
+
     return Object.entries(counts)
       .map(([name, count]) => ({ name, count, item: tinderItems.find(i => (i.type === 'menu' ? i.name : i.data.id) === name) }))
       .filter(r => r.item !== undefined)
@@ -411,9 +406,6 @@ export default function Home() {
     window.history.replaceState({}, document.title, window.location.pathname);
   };
 
-  // -------------------------------------------------------------
-  // Effects
-  // -------------------------------------------------------------
   useEffect(() => {
     if (typeof window !== "undefined") {
       const userAgent = navigator.userAgent.toLowerCase();
@@ -425,16 +417,23 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (document.getElementById("kakao-sdk")) return;
-    const script = document.createElement("script");
-    script.id = "kakao-sdk";
-    script.src = "https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js";
-    script.async = true;
-    script.onload = () => {
-      const kakao = (window as any).Kakao;
-      if (kakao && !kakao.isInitialized()) kakao.init(KAKAO_JS_KEY);
+    const loadKakaoSdk = () => {
+      const w = window as any;
+      if (w.Kakao && w.Kakao.isInitialized()) return;
+      if (!document.getElementById("kakao-sdk")) {
+        const script = document.createElement("script");
+        script.id = "kakao-sdk";
+        script.src = "https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js";
+        script.async = true;
+        script.onload = () => {
+          if (w.Kakao && !w.Kakao.isInitialized()) {
+            try { w.Kakao.init(KAKAO_JS_KEY); } catch (e) { }
+          }
+        };
+        document.head.appendChild(script);
+      }
     };
-    document.head.appendChild(script);
+    loadKakaoSdk();
   }, []);
 
   useEffect(() => {
@@ -506,9 +505,11 @@ export default function Home() {
       if (roomDoc.exists()) {
         const rData = roomDoc.data();
         if (rData.status !== 'closed' && rData.status !== 'reveal' && rData.status !== 'destroyed') {
-          const updates: any = { participants: arrayUnion(myName) };
-          if (user && guestId) updates.participants = arrayRemove(guestId);
-          await updateDoc(roomRef, updates);
+          setTimeout(async () => {
+            const updates: any = { participants: arrayUnion(myName) };
+            if (user && guestId) updates.participants = arrayRemove(guestId);
+            await updateDoc(roomRef, updates);
+          }, 500);
         }
         setTinderRoomId(roomId); setTinderMode(rData.mode); setTinderItems(rData.items || []);
         setCurrentTinderIndex(0); setLikedTinderItems([]); setTinderFinalPick(0);
@@ -611,9 +612,6 @@ export default function Home() {
     return () => unsubs.forEach(fn => fn());
   }, [user, showGroupRecords, partnerUids, filterCategory, profileNickname, profilePhotoUrl, partnersData]);
 
-  // -------------------------------------------------------------
-  // Handlers
-  // -------------------------------------------------------------
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault(); if (!user) return; setIsSavingProfile(true);
     try {
@@ -794,89 +792,96 @@ export default function Home() {
       .then((results) => { setPreviews((prev) => [...prev, ...results]); e.target.value = ""; });
   };
 
+  const executeKakaoShare = (shareLogic: (kakao: any) => void) => {
+    const w = window as any;
+    if (!w.Kakao) {
+      alert("카카오톡 공유 모듈이 아직 로드되지 않았습니다. 잠시 후 다시 시도해주세요.\n(광고 차단 프로그램이 켜져 있다면 꺼주세요)");
+      return;
+    }
+    if (!w.Kakao.isInitialized()) {
+      try {
+        w.Kakao.init(KAKAO_JS_KEY);
+      } catch (error) {
+        alert("카카오톡 연동 에러가 발생했습니다. 카카오 개발자 센터의 도메인 설정이나 키 값을 확인해주세요.");
+        return;
+      }
+    }
+    shareLogic(w.Kakao);
+  };
+
   const handleLobbyKakaoShare = () => {
     if (!tinderRoomId) return;
-    const kakao = (window as any).Kakao;
-    if (!kakao || !kakao.isInitialized()) {
-      try { kakao.init(KAKAO_JS_KEY); } catch (e) { alert("카카오톡 공유를 준비 중입니다. 잠시 후 다시 시도해주세요."); return; }
-    }
-    const url = `${window.location.origin}/?room=${tinderRoomId}`;
-    kakao.Share.sendDefault({
-      objectType: 'feed',
-      content: { title: `🔥 맛집 투표방이 열렸습니다!`, description: `친구들과 다같이 카드를 스와이프하고\n오늘 뭐 먹을지 투표로 결정하세요!`, imageUrl: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1', link: { mobileWebUrl: url, webUrl: url } },
-      buttons: [{ title: '투표 참여하기', link: { mobileWebUrl: url, webUrl: url } }],
+    executeKakaoShare((kakao) => {
+      const url = `${window.location.origin}/?room=${tinderRoomId}`;
+      kakao.Share.sendDefault({
+        objectType: 'feed',
+        content: { title: `🔥 맛집 투표방이 열렸습니다!`, description: `친구들과 다같이 카드를 스와이프하고\n오늘 뭐 먹을지 투표로 결정하세요!`, imageUrl: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1', link: { mobileWebUrl: url, webUrl: url } },
+        buttons: [{ title: '투표 참여하기', link: { mobileWebUrl: url, webUrl: url } }],
+      });
     });
   };
 
   const handleFinalResultKakaoShare = async (place: any, isSavedPlace: boolean) => {
-    const kakao = (window as any).Kakao;
-    if (!kakao || !kakao.isInitialized()) {
-      try { kakao.init(KAKAO_JS_KEY); } catch (e) { alert("카카오톡 연결 준비 중입니다."); return; }
-    }
+    executeKakaoShare(async (kakao) => {
+      const linkUrl = isSavedPlace ? `${window.location.origin}/?uid=${place.userId || user?.uid}&rid=${place.id}` : place.place_url;
+      const storeName = isSavedPlace ? place.storeName : place.place_name;
 
-    const linkUrl = isSavedPlace ? `${window.location.origin}/?uid=${place.userId || user?.uid}&rid=${place.id}` : place.place_url;
-    const storeName = isSavedPlace ? place.storeName : place.place_name;
+      kakao.Share.sendDefault({
+        objectType: 'feed',
+        content: {
+          title: `🎉 오늘의 맛집으로 결정!`,
+          description: `방장이 [${storeName}] (으)로 최종 결정했습니다!`,
+          imageUrl: isSavedPlace && place.imageUrls?.[0] ? place.imageUrls[0] : 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1',
+          link: { mobileWebUrl: linkUrl, webUrl: linkUrl }
+        },
+        buttons: [{ title: isSavedPlace ? '영수증 확인하기' : '카카오맵에서 보기', link: { mobileWebUrl: linkUrl, webUrl: linkUrl } }],
+      });
 
-    kakao.Share.sendDefault({
-      objectType: 'feed',
-      content: {
-        title: `🎉 오늘의 맛집으로 결정!`,
-        description: `방장이 [${storeName}] (으)로 최종 결정했습니다!`,
-        imageUrl: isSavedPlace && place.imageUrls?.[0] ? place.imageUrls[0] : 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1',
-        link: { mobileWebUrl: linkUrl, webUrl: linkUrl }
-      },
-      buttons: [{ title: isSavedPlace ? '영수증 확인하기' : '카카오맵에서 보기', link: { mobileWebUrl: linkUrl, webUrl: linkUrl } }],
+      if (isHost && tinderRoomId) {
+        await updateDoc(doc(db, "rooms", tinderRoomId), { status: 'destroyed' });
+      }
+      setTimeout(() => {
+        alert("카카오톡으로 최종 결과가 공유되었습니다!\n투표방을 종료합니다.");
+        closeTinderFlow();
+      }, 500);
     });
-
-    if (isHost && tinderRoomId) {
-      await updateDoc(doc(db, "rooms", tinderRoomId), { status: 'destroyed' });
-    }
-    setTimeout(() => {
-      alert("카카오톡으로 최종 결과가 공유되었습니다!\n투표방을 종료합니다.");
-      closeTinderFlow();
-    }, 500);
   };
 
   const handleTrackBShare = async () => {
     if (!roomData?.finalWinner) return;
     const winnerData = roomData.finalWinner.data;
-    const kakao = (window as any).Kakao;
-    if (!kakao || !kakao.isInitialized()) {
-      try { kakao.init(KAKAO_JS_KEY); } catch (e) { alert("카카오톡 연결 준비 중입니다."); return; }
-    }
+    executeKakaoShare(async (kakao) => {
+      const url = `${window.location.origin}/?uid=${winnerData.userId || user?.uid}&rid=${winnerData.id}`;
+      kakao.Share.sendDefault({
+        objectType: 'feed',
+        content: {
+          title: `🏆 오늘 우리의 최종 선택!`,
+          description: `1위로 선정된 [${winnerData.storeName}]\n지금 바로 확인해보세요!`,
+          imageUrl: winnerData.imageUrls?.[0] || 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1',
+          link: { mobileWebUrl: url, webUrl: url }
+        },
+        buttons: [{ title: '맛집 정보 보기', link: { mobileWebUrl: url, webUrl: url } }],
+      });
 
-    const url = `${window.location.origin}/?uid=${winnerData.userId || user?.uid}&rid=${winnerData.id}`;
-    kakao.Share.sendDefault({
-      objectType: 'feed',
-      content: {
-        title: `🏆 오늘 우리의 최종 선택!`,
-        description: `1위로 선정된 [${winnerData.storeName}]\n지금 바로 확인해보세요!`,
-        imageUrl: winnerData.imageUrls?.[0] || 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1',
-        link: { mobileWebUrl: url, webUrl: url }
-      },
-      buttons: [{ title: '맛집 정보 보기', link: { mobileWebUrl: url, webUrl: url } }],
+      if (isHost && tinderRoomId) {
+        await updateDoc(doc(db, "rooms", tinderRoomId), { status: 'destroyed' });
+      }
+      setTimeout(() => {
+        alert("카카오톡으로 1위 결과가 공유되었습니다!\n투표방을 종료합니다.");
+        closeTinderFlow();
+      }, 500);
     });
-
-    if (isHost && tinderRoomId) {
-      await updateDoc(doc(db, "rooms", tinderRoomId), { status: 'destroyed' });
-    }
-    setTimeout(() => {
-      alert("카카오톡으로 1위 결과가 공유되었습니다!\n투표방을 종료합니다.");
-      closeTinderFlow();
-    }, 500);
   };
 
   const handleKakaoShare = () => {
     if (!shareReview || !user) return;
-    const kakao = (window as any).Kakao;
-    if (!kakao || !kakao.isInitialized()) {
-      try { kakao.init(KAKAO_JS_KEY); } catch (e) { alert("카카오톡 연결 준비 중입니다."); return; }
-    }
-    const url = `${window.location.origin}/?uid=${shareReview.userId || user.uid}&rid=${shareReview.id}`;
-    kakao.Share.sendDefault({
-      objectType: 'feed',
-      content: { title: `🍽️ [오늘 뭐 먹지?] ${shareReview.storeName}`, description: `⭐ 별점: ${shareReview.rating}.0\n💬 "${shareReview.comment}"`, imageUrl: shareReview.imageUrls?.[receiptImageIndex] || 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1', link: { mobileWebUrl: url, webUrl: url } },
-      buttons: [{ title: '맛집 저장하기', link: { mobileWebUrl: url, webUrl: url } }],
+    executeKakaoShare((kakao) => {
+      const url = `${window.location.origin}/?uid=${shareReview.userId || user.uid}&rid=${shareReview.id}`;
+      kakao.Share.sendDefault({
+        objectType: 'feed',
+        content: { title: `🍽️ [오늘 뭐 먹지?] ${shareReview.storeName}`, description: `⭐ 별점: ${shareReview.rating}.0\n💬 "${shareReview.comment}"`, imageUrl: shareReview.imageUrls?.[receiptImageIndex] || 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1', link: { mobileWebUrl: url, webUrl: url } },
+        buttons: [{ title: '맛집 저장하기', link: { mobileWebUrl: url, webUrl: url } }],
+      });
     });
   };
 
@@ -1023,7 +1028,21 @@ export default function Home() {
   // Render
   // -------------------------------------------------------------
 
-  if (isKakaoBrowser) return null;
+  if (isKakaoBrowser) {
+    return (
+      <div className="min-h-screen bg-stone-900 flex flex-col items-center justify-center text-white p-6 z-[9999] fixed inset-0">
+        <span className="text-5xl mb-4">🚀</span>
+        <p className="font-bold text-xl mb-3">기본 브라우저로 이동 중입니다!</p>
+        <div className="bg-stone-800 p-5 rounded-2xl border border-stone-700 text-center">
+          <p className="text-sm text-stone-300 break-keep leading-relaxed">
+            로그인 상태 유지를 위해 안전한 브라우저로 이동합니다.<br />
+            자동으로 화면이 넘어가지 않는다면 우측 하단의<br />
+            <span className="text-orange-500 font-bold px-1">⋮ 버튼</span>을 눌러 <span className="text-orange-500 font-bold px-1">'다른 브라우저로 열기'</span>를 선택해주세요.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const renderReviewList = () => {
     if (filteredReviews.length === 0) {
@@ -1459,29 +1478,6 @@ export default function Home() {
                 const isFailed = maxVotes <= 1;
                 const isTie = maxVotes > 1 && roomLeaderboard.filter(r => r.count === maxVotes).length > 1;
 
-                if (roomLeaderboard.length === 0) {
-                  return (
-                    <div className="flex-1 flex flex-col items-center justify-center py-10">
-                      {roomData?.status === 'closed' ? (
-                        <>
-                          <span className="text-5xl mb-3">🥲</span>
-                          <p className="text-xs font-bold text-stone-500 text-center break-keep mb-6">아무도 좋아요를 누르지 않았어요.<br />투표가 마감되었습니다.</p>
-                          {isHost && (
-                            <button onClick={handleRestartVote} className="bg-stone-800 hover:bg-black text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 cursor-pointer transition-colors shadow-md">
-                              <RefreshCw size={16} /> 다시 투표하기
-                            </button>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          <Loader2 size={28} className="animate-spin text-stone-300 mb-3" />
-                          <p className="text-xs font-bold text-stone-500">투표 데이터를 취합하고 있어요...</p>
-                        </>
-                      )}
-                    </div>
-                  );
-                }
-
                 if (roomData?.status === 'closed' && isFailed) {
                   return (
                     <div className="flex-1 flex flex-col items-center justify-center py-10 mt-6">
@@ -1865,6 +1861,7 @@ export default function Home() {
         </div>
       )}
 
+      {/* 영수증 모달 및 공유 (z-250) */}
       {shareReview && (
         <div className="fixed inset-0 z-[250] flex items-center justify-center p-0 sm:p-6" onClick={() => setShareReview(null)}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
