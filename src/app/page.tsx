@@ -151,6 +151,7 @@ const PlaceSearchModal = ({ onClose, onSelectTarget, initialQuery = "" }: { onCl
             headers: { Authorization: `KakaoAK ${KAKAO_REST_KEY}` }
           });
           const data = await res.json();
+          // FD6(음식점), CE7(카페) 만 추출
           setResults((data.documents || []).filter((p: any) => ['FD6', 'CE7'].includes(p.category_group_code)));
         } catch (e) { }
         setIsLoading(false);
@@ -353,7 +354,6 @@ export default function Home() {
     if (!roomData || !tinderItems.length) return [];
     const counts: Record<string, number> = {};
 
-    // 무조건 모든 항목에 0표로 기본값 세팅!
     tinderItems.forEach((item: any) => {
       const id = item.type === 'menu' ? item.name : item.data.id;
       counts[id] = 0;
@@ -400,7 +400,7 @@ export default function Home() {
   const myName = user ? profileNickname : guestId;
   const isHost = roomData?.hostUid === myId;
 
-  // 🌟 (버그 수정 5, 4) 방장이 대기방에서 나갈 땐 폭파, 게스트는 명단 삭제
+  // 🌟 (개선 5) 투표 대기방에서 나갈 때 참가자 명단에서 완전히 삭제 및 setup 상태 폭파 예외 처리
   const handleCloseTinder = async () => {
     if (tinderState === 'setup') {
       closeTinderFlow();
@@ -537,7 +537,7 @@ export default function Home() {
     checkAndImport();
   }, [user, authLoading, pendingImportTrigger, knownCategories]);
 
-  // 🌟 (버그 수정 1) 방 입장 시 0.8초간 닉네임 로딩을 기다리고 모든 유령 ID를 삭제합니다!
+  // 🌟 (버그 수정 1) 방 입장 시 0.8초간 닉네임 로딩을 기다리고 모든 유령 ID를 강제 삭제합니다!
   const joinRoom = async (roomId: string) => {
     try {
       const roomRef = doc(db, "rooms", roomId);
@@ -550,7 +550,6 @@ export default function Home() {
             if (freshDoc.exists()) {
               let currentParticipants = freshDoc.data().participants || [];
               if (user) {
-                // 로그인 유저라면 모든 유령(익명_) 데이터 삭제
                 currentParticipants = currentParticipants.filter((p: string) => !p.startsWith("익명_"));
               }
               if (!currentParticipants.includes(myName)) {
@@ -735,8 +734,9 @@ export default function Home() {
 
       places.forEach((p: any) => {
         const matched = reviews.find((r: Review) => {
-          if (r.placeId) return r.placeId === p.id;
-          return normalize(r.storeName).includes(normalize(p.place_name)) || normalize(p.place_name).includes(normalize(r.storeName));
+          if (r.placeId && p.id && r.placeId === p.id) return true;
+          if (!r.placeId && r.storeName && normalize(r.storeName).includes(normalize(p.place_name))) return true;
+          return false;
         });
 
         if (matched) {
@@ -873,7 +873,7 @@ export default function Home() {
     });
   };
 
-  // 🌟 (버그 수정 4, 6) 외부 맛집 다이렉트 맵 링크 변환 및 공유 성공 시 자동 방폭파 취소
+  // 🌟 (개선 4, 6) 외부 장소 카카오맵 검색 링크 치환 및 자동 방폭파 취소
   const handleFinalResultKakaoShare = async (place: any, isSavedPlace: boolean) => {
     executeKakaoShare(async (kakao) => {
       const linkUrl = isSavedPlace ? `${window.location.origin}/?uid=${place.userId || user?.uid}&rid=${place.id}` : `https://map.kakao.com/link/search/${encodeURIComponent(place.place_name)}`;
@@ -887,7 +887,7 @@ export default function Home() {
           imageUrl: isSavedPlace && place.imageUrls?.[0] ? place.imageUrls[0] : 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1',
           link: { mobileWebUrl: linkUrl, webUrl: linkUrl }
         },
-        buttons: [{ title: isSavedPlace ? '영수증 확인하기' : '카카오맵에서 보기', link: { mobileWebUrl: linkUrl, webUrl: linkUrl } }],
+        buttons: [{ title: isSavedPlace ? '영수증 확인하기' : '카카오맵에서 맛집 보기', link: { mobileWebUrl: linkUrl, webUrl: linkUrl } }],
       });
     });
   };
@@ -1044,8 +1044,9 @@ export default function Home() {
 
       places.forEach((p: any) => {
         const matched = reviews.find((r: Review) => {
-          if (r.placeId) return r.placeId === p.id;
-          return normalize(r.storeName).includes(normalize(p.place_name)) || normalize(p.place_name).includes(normalize(r.storeName));
+          if (r.placeId && p.id && r.placeId === p.id) return true;
+          if (!r.placeId && r.storeName && normalize(r.storeName).includes(normalize(p.place_name))) return true;
+          return false;
         });
         if (matched) { if (!saved.some((s: Review) => s.id === matched.id)) saved.push(matched); }
         else { if (external.length < 5) external.push(p); }
@@ -1081,7 +1082,7 @@ export default function Home() {
     );
   }
 
-  // 🌟 (개선 7) 가게명이 너무 길어도 UI가 깨지지 않고 말줄임표 처리되도록 Flexbox 구조 완벽 수정
+  // 🌟 (버그 수정 7) 가게명이 너무 길어도 UI가 깨지지 않고 말줄임표 처리되도록 Flexbox 구조 완벽 수정
   const renderReviewList = () => {
     if (filteredReviews.length === 0) {
       return <div className="py-12 text-center bg-white rounded-3xl border border-stone-100"><p className="text-stone-500 font-bold mb-1">저장된 맛집이 없어요 🥲</p></div>;
@@ -1517,6 +1518,29 @@ export default function Home() {
                 const isFailed = maxVotes === 0;
                 const isTie = maxVotes > 0 && roomLeaderboard.filter(r => r.count === maxVotes).length > 1;
 
+                if (roomLeaderboard.length === 0) {
+                  return (
+                    <div className="flex-1 flex flex-col items-center justify-center py-10">
+                      {roomData?.status === 'closed' ? (
+                        <>
+                          <span className="text-5xl mb-3">🥲</span>
+                          <p className="text-xs font-bold text-stone-500 text-center break-keep mb-6">아무도 좋아요를 누르지 않았어요.<br />투표가 마감되었습니다.</p>
+                          {isHost && (
+                            <button onClick={handleRestartVote} className="bg-stone-800 hover:bg-black text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 cursor-pointer transition-colors shadow-md">
+                              <RefreshCw size={16} /> 다시 투표하기
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <Loader2 size={28} className="animate-spin text-stone-300 mb-3" />
+                          <p className="text-xs font-bold text-stone-500">투표 데이터를 취합하고 있어요...</p>
+                        </>
+                      )}
+                    </div>
+                  );
+                }
+
                 if (roomData?.status === 'closed' && isFailed) {
                   return (
                     <div className="flex-1 flex flex-col items-center justify-center py-10 mt-6">
@@ -1691,7 +1715,7 @@ export default function Home() {
                     {(roomData?.nearbySaved || []).map((r: Review) => {
                       const isHostFav = r.userId === roomData?.hostUid;
                       // 🌟 (버그 수정 2) 게스트 화면에서도 '내 리뷰'에 있어야만 단골 맛집이라고 띄워줌
-                      const isMyFav = reviews.some((myR) => myR.placeId === r.placeId || (myR.storeName && normalize(myR.storeName).includes(normalize(r.storeName))));
+                      const isMyFav = reviews.some((myR) => (myR.placeId && r.placeId && myR.placeId === r.placeId) || (!myR.placeId && myR.storeName && normalize(myR.storeName).includes(normalize(r.storeName))));
 
                       return (
                         <div key={r.id} className="flex items-center justify-between bg-orange-50 border border-orange-100 p-3 rounded-xl">
@@ -1715,7 +1739,7 @@ export default function Home() {
                       )
                     })}
                     {(roomData?.nearbyExternal || []).map((p: any, i: number) => {
-                      const isAlreadySaved = reviews.some(r => r.placeId === p.id || (r.storeName && normalize(r.storeName).includes(normalize(p.place_name))));
+                      const isAlreadySaved = reviews.some(r => (r.placeId && p.id && r.placeId === p.id) || (!r.placeId && r.storeName && normalize(r.storeName).includes(normalize(p.place_name))));
                       return (
                         <div key={i} className="flex items-center justify-between bg-white border border-stone-200 rounded-xl px-3 py-3 shadow-sm group">
                           <a href={p.place_url} target="_blank" className="flex flex-col min-w-0 flex-1 cursor-pointer pr-2">
