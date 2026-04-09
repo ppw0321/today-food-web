@@ -119,6 +119,7 @@ const getCurrentBadge = (count: number) => {
 interface Review {
   id: string; storeName: string; menu: string; rating: number; comment: string; category: string; imageUrls?: string[]; userId?: string; userPhoto?: string; userName?: string; createdAt?: any;
   placeId?: string; placeUrl?: string; address?: string;
+  isMerged?: boolean; mergedImages?: string[]; mergedComments?: any[]; // 🌟 병합용 타입 추가
 }
 
 // =========================================================================
@@ -171,7 +172,7 @@ const PlaceSearchModal = ({ onClose, onSelectTarget, initialQuery = "" }: { onCl
           <button onClick={onClose} className="p-1.5 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 cursor-pointer"><X size={18} /></button>
         </div>
         <div className="p-4 shrink-0 flex gap-2">
-          <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="식당 이름을 검색하세요 (예: 마담밍 선릉)" className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500 outline-none" autoFocus />
+          <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="맛집 이름을 검색하세요 (예: 마담밍 선릉)" className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500 outline-none" autoFocus />
           <div className="shrink-0 bg-blue-50 text-blue-500 px-5 rounded-xl font-bold text-sm flex items-center justify-center w-[70px]">
             {isLoading ? <Loader2 size={16} className="animate-spin" /> : "검색"}
           </div>
@@ -338,6 +339,8 @@ export default function Home() {
 
   const [isKakaoBrowser, setIsKakaoBrowser] = useState(false);
 
+  const normalize = (s: string) => s.replace(/[\s()（）]/g, "").toLowerCase();
+
   const myReviewsCount = reviews.filter((r: Review) => r.userId === user?.uid).length;
   const displayBadge = activeBadge || getCurrentBadge(myReviewsCount);
 
@@ -349,6 +352,42 @@ export default function Home() {
       return true;
     });
   }, [reviews, showGroupRecords, selectedAuthorFilter, user]);
+
+  const mergedReviews = useMemo(() => {
+    if (!showGroupRecords) return filteredReviews;
+
+    const groups: Record<string, Review[]> = {};
+    filteredReviews.forEach(r => {
+      const key = r.placeId ? r.placeId : normalize(r.storeName);
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(r);
+    });
+
+    return Object.values(groups).map(group => {
+      if (group.length === 1) return group[0];
+
+      const myReview = group.find(r => r.userId === user?.uid);
+      const base = myReview || group[0];
+      const others = group.filter(r => r.id !== base.id);
+
+      const mergedImages = Array.from(new Set([
+        ...(base.imageUrls || []),
+        ...others.flatMap(o => o.imageUrls || [])
+      ])).slice(0, 10);
+
+      const mergedComments = [
+        { userId: base.userId, userName: base.userName, userPhoto: base.userPhoto, rating: base.rating, comment: base.comment },
+        ...others.map(o => ({ userId: o.userId, userName: o.userName, userPhoto: o.userPhoto, rating: o.rating, comment: o.comment }))
+      ];
+
+      return {
+        ...base,
+        isMerged: true,
+        mergedImages,
+        mergedComments
+      };
+    });
+  }, [filteredReviews, showGroupRecords, user]);
 
   const roomLeaderboard = useMemo(() => {
     if (!roomData || !tinderItems.length) return [];
@@ -371,7 +410,6 @@ export default function Home() {
       .sort((a, b) => b.count - a.count);
   }, [roomData, tinderItems]);
 
-  const normalize = (s: string) => s.replace(/[\s()（）]/g, "").toLowerCase();
   const getMenuCategory = (menuName: string): string | null => {
     const norm = normalize(menuName); let bestMatchCat: string | null = null; let maxKwLen = 0;
     for (const [cat, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
@@ -558,9 +596,9 @@ export default function Home() {
             const freshDoc = await getDoc(roomRef);
             if (freshDoc.exists()) {
               let currentParticipants = freshDoc.data().participants || [];
-              if (user) {
-                currentParticipants = currentParticipants.filter((p: string) => !p.startsWith("익명_"));
-              }
+
+              currentParticipants = currentParticipants.filter((p: string) => !p.startsWith("익명_") || p === myName);
+
               if (!currentParticipants.includes(myName)) {
                 currentParticipants.push(myName);
               }
@@ -886,12 +924,16 @@ export default function Home() {
       const linkUrl = isSavedPlace ? `${window.location.origin}/?uid=${place.userId || user?.uid}&rid=${place.id}` : `${window.location.origin}/?kmap=${encodeURIComponent(place.place_name)}`;
       const storeName = isSavedPlace ? place.storeName : place.place_name;
 
+      const previewImage = isSavedPlace
+        ? ((place.isMerged ? place.mergedImages : place.imageUrls) || [])[0]
+        : 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1';
+
       kakao.Share.sendDefault({
         objectType: 'feed',
         content: {
           title: `🎉 오늘의 맛집으로 결정!`,
           description: `방장이 [${storeName}] (으)로 최종 결정했습니다!`,
-          imageUrl: isSavedPlace && place.imageUrls?.[0] ? place.imageUrls[0] : 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1',
+          imageUrl: previewImage || 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1',
           link: { mobileWebUrl: linkUrl, webUrl: linkUrl }
         },
         buttons: [{ title: '맛집 정보 보기', link: { mobileWebUrl: linkUrl, webUrl: linkUrl } }],
@@ -921,9 +963,12 @@ export default function Home() {
     if (!shareReview || !user) return;
     executeKakaoShare((kakao) => {
       const url = `${window.location.origin}/?uid=${shareReview.userId || user.uid}&rid=${shareReview.id}`;
+      const receiptImages = (shareReview.isMerged ? shareReview.mergedImages : shareReview.imageUrls) || [];
+      const previewImage = receiptImages[receiptImageIndex] || 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1';
+
       kakao.Share.sendDefault({
         objectType: 'feed',
-        content: { title: `🍽️ [오늘 뭐 먹지?] ${shareReview.storeName}`, description: `⭐ 별점: ${shareReview.rating}.0\n💬 "${shareReview.comment}"`, imageUrl: shareReview.imageUrls?.[receiptImageIndex] || 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1', link: { mobileWebUrl: url, webUrl: url } },
+        content: { title: `🍽️ [오늘 뭐 먹지?] ${shareReview.storeName}`, description: `⭐ 별점: ${shareReview.rating}.0\n💬 "${shareReview.comment}"`, imageUrl: previewImage, link: { mobileWebUrl: url, webUrl: url } },
         buttons: [{ title: '맛집 정보 보기', link: { mobileWebUrl: url, webUrl: url } }],
       });
     });
@@ -1054,7 +1099,14 @@ export default function Home() {
           if (r.placeId && p.id && r.placeId === p.id) return true;
           return normalize(r.storeName).includes(normalize(p.place_name)) || normalize(p.place_name).includes(normalize(r.storeName));
         });
-        if (matched) { if (!saved.some((s: Review) => s.id === matched.id)) saved.push(matched); }
+
+        if (matched) {
+          if (normalize(matched.menu).includes(normalize(menuName)) || normalize(matched.category).includes(normalize(menuName)) || normalize(matched.storeName).includes(normalize(menuName))) {
+            if (!saved.some((s: Review) => s.id === matched.id)) saved.push(matched);
+          } else {
+            if (external.length < 5) external.push(p);
+          }
+        }
         else { if (external.length < 5) external.push(p); }
       });
 
@@ -1088,49 +1140,88 @@ export default function Home() {
     );
   }
 
+  // 🌟 (버그 수정) 타입스크립트 에러 방지 (null 체크 강화)
   const renderReviewList = () => {
-    if (filteredReviews.length === 0) {
+    if (mergedReviews.length === 0) {
       return <div className="py-12 text-center bg-white rounded-3xl border border-stone-100"><p className="text-stone-500 font-bold mb-1">저장된 맛집이 없어요 🥲</p></div>;
     }
     return (
       <div className="grid gap-6">
-        {filteredReviews.map((review: Review) => (
-          <div key={review.id} className="bg-white rounded-3xl overflow-hidden border border-stone-100 shadow-sm hover:shadow-md transition-shadow relative flex flex-col">
-            {showGroupRecords && (
-              <div className="absolute top-3 left-3 z-10 bg-white/90 backdrop-blur-sm p-1.5 rounded-full shadow-md border border-white/50 flex items-center gap-2 pr-3">
-                {review.userPhoto ? <img src={review.userPhoto} className="w-5 h-5 rounded-full object-cover" /> : <div className="w-5 h-5 rounded-full bg-stone-200 flex items-center justify-center text-[10px]"><User size={10} /></div>}
-                <span className="text-[10px] font-black text-stone-700">{review.userName}</span>
-              </div>
-            )}
-            {review.imageUrls && review.imageUrls.length > 0 && (
-              <div className="flex overflow-x-auto scrollbar-hide snap-x bg-stone-100 h-48 shrink-0">
-                {review.imageUrls.map((url: string, idx: number) => <img key={idx} src={url} onClick={() => setFullScreenData({ urls: review.imageUrls!, currentIndex: idx })} className="h-full w-full object-cover snap-center min-w-full cursor-zoom-in" />)}
-              </div>
-            )}
-            <div className="p-5 flex-1 flex flex-col">
-              <div className="flex justify-between items-start gap-3 mb-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <h3 className="font-bold text-lg text-stone-800 truncate leading-tight">{review.storeName}</h3>
-                    {review.placeUrl && <a href={review.placeUrl} target="_blank" className="text-blue-500 hover:text-blue-600 shrink-0"><LinkIcon size={14} /></a>}
+        {mergedReviews.map((review: any) => {
+          const displayImages = (review.isMerged ? review.mergedImages : review.imageUrls) || [];
+          const displayComments = review.mergedComments || [];
+
+          return (
+            <div key={review.id} className="bg-white rounded-3xl overflow-hidden border border-stone-100 shadow-sm hover:shadow-md transition-shadow relative flex flex-col">
+              {showGroupRecords && !review.isMerged && (
+                <div className="absolute top-3 left-3 z-10 bg-white/90 backdrop-blur-sm p-1.5 rounded-full shadow-md border border-white/50 flex items-center gap-2 pr-3">
+                  {review.userPhoto ? <img src={review.userPhoto} className="w-5 h-5 rounded-full object-cover" /> : <div className="w-5 h-5 rounded-full bg-stone-200 flex items-center justify-center text-[10px]"><User size={10} /></div>}
+                  <span className="text-[10px] font-black text-stone-700">{review.userName}</span>
+                </div>
+              )}
+
+              {showGroupRecords && review.isMerged && (
+                <div className="absolute top-3 left-3 z-10 flex -space-x-2">
+                  {displayComments.map((mc: any, i: number) => (
+                    <div key={i} className="bg-white/90 backdrop-blur-sm p-0.5 rounded-full shadow-md border border-white/50 flex items-center justify-center">
+                      {mc.userPhoto ? <img src={mc.userPhoto} className="w-6 h-6 rounded-full object-cover" /> : <div className="w-6 h-6 rounded-full bg-stone-200 flex items-center justify-center text-[10px]"><User size={12} /></div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {displayImages.length > 0 && (
+                <div className="flex overflow-x-auto scrollbar-hide snap-x bg-stone-100 h-48 shrink-0">
+                  {displayImages.map((url: string, idx: number) => (
+                    <img key={idx} src={url} onClick={() => setFullScreenData({ urls: displayImages, currentIndex: idx })} className="h-full w-full object-cover snap-center min-w-full cursor-zoom-in" />
+                  ))}
+                </div>
+              )}
+              <div className="p-5 flex-1 flex flex-col">
+                <div className="flex justify-between items-start gap-3 mb-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <h3 className="font-bold text-lg text-stone-800 truncate leading-tight">{review.storeName}</h3>
+                      {review.placeUrl && <a href={review.placeUrl} target="_blank" className="text-blue-500 hover:text-blue-600 shrink-0"><LinkIcon size={14} /></a>}
+                    </div>
+                    <p className="text-orange-500 text-sm font-semibold truncate">{review.menu} | {review.category}</p>
                   </div>
-                  <p className="text-orange-500 text-sm font-semibold truncate">{review.menu} | {review.category}</p>
+                  <div className="flex gap-1 shrink-0 items-center">
+                    <button onClick={() => { setShareReview(review); setReceiptImageIndex(0); }} className="p-2 bg-stone-50 rounded-lg text-stone-400 hover:text-blue-500 cursor-pointer"><Share2 size={14} /></button>
+                    {!review.isMerged && review.userId === user?.uid && (
+                      <>
+                        <button onClick={() => openEditModal(review)} className="p-2 bg-stone-50 rounded-lg text-stone-400 hover:text-orange-500 cursor-pointer"><Pencil size={14} /></button>
+                        <button onClick={() => handleDeleteReview(review.id)} className="p-2 bg-stone-50 rounded-lg text-stone-400 hover:text-red-500 cursor-pointer"><Trash2 size={14} /></button>
+                      </>
+                    )}
+                    {!review.isMerged && (
+                      <div className="flex items-center bg-amber-50 px-2 rounded-lg gap-1 shrink-0"><Star size={12} className="text-amber-500 fill-amber-500" /><span className="text-xs font-bold">{review.rating}.0</span></div>
+                    )}
+                  </div>
                 </div>
-                <div className="flex gap-1 shrink-0 items-center">
-                  <button onClick={() => { setShareReview(review); setReceiptImageIndex(0); }} className="p-2 bg-stone-50 rounded-lg text-stone-400 hover:text-blue-500 cursor-pointer"><Share2 size={14} /></button>
-                  {review.userId === user?.uid && (
-                    <>
-                      <button onClick={() => openEditModal(review)} className="p-2 bg-stone-50 rounded-lg text-stone-400 hover:text-orange-500 cursor-pointer"><Pencil size={14} /></button>
-                      <button onClick={() => handleDeleteReview(review.id)} className="p-2 bg-stone-50 rounded-lg text-stone-400 hover:text-red-500 cursor-pointer"><Trash2 size={14} /></button>
-                    </>
-                  )}
-                  <div className="flex items-center bg-amber-50 px-2 rounded-lg gap-1 shrink-0"><Star size={12} className="text-amber-500 fill-amber-500" /><span className="text-xs font-bold">{review.rating}.0</span></div>
-                </div>
+
+                {review.isMerged ? (
+                  <div className="flex flex-col gap-2 mt-auto">
+                    {displayComments.map((mc: any, i: number) => (
+                      <div key={i} className="bg-[#FFFDF6] p-3 rounded-2xl border border-orange-50/50 flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            {mc.userPhoto ? <img src={mc.userPhoto} className="w-5 h-5 rounded-full object-cover border border-stone-200" /> : <div className="w-5 h-5 rounded-full bg-stone-200 flex items-center justify-center text-[10px]"><User size={10} /></div>}
+                            <span className="text-xs font-bold text-stone-700">{mc.userName}</span>
+                          </div>
+                          <div className="flex items-center gap-0.5"><Star size={12} className="text-amber-500 fill-amber-500" /><span className="text-xs font-bold">{mc.rating}.0</span></div>
+                        </div>
+                        <p className="italic text-stone-600 text-sm leading-relaxed">"{mc.comment}"</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-[#FFFDF6] p-4 rounded-2xl italic text-stone-600 text-sm border border-orange-50/50 mt-auto">"{review.comment}"</div>
+                )}
               </div>
-              <div className="bg-[#FFFDF6] p-4 rounded-2xl italic text-stone-600 text-sm border border-orange-50/50 mt-auto">"{review.comment}"</div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   };
@@ -1718,7 +1809,6 @@ export default function Home() {
                   <>
                     {(roomData?.nearbySaved || []).map((r: Review) => {
                       const isHostFav = r.userId === roomData?.hostUid;
-                      // 🌟 (버그 수정 2, 5) 아이디가 없어도 이름 교차 검증으로 무조건 단골 맛집을 완벽하게 찾아냄
                       const myFavReview = reviews.find((myR) =>
                         (myR.placeId && r.placeId && myR.placeId === r.placeId) ||
                         (myR.storeName && r.storeName && (normalize(myR.storeName).includes(normalize(r.storeName)) || normalize(r.storeName).includes(normalize(myR.storeName))))
@@ -1745,17 +1835,18 @@ export default function Home() {
                           </div>
                           <div className="flex items-center gap-1 shrink-0 flex-col items-end ml-2">
                             <div className="flex items-center"><Star size={11} className="text-amber-500 fill-amber-500 mr-1" /><span className="text-xs font-bold text-amber-600">{r.rating}.0</span></div>
-                            {isHost ? (
-                              <button onClick={() => handleFinalResultKakaoShare(r, true)} className="mt-1 text-[10px] font-bold bg-stone-800 text-white px-2 py-1 rounded cursor-pointer">이 맛집으로 결정</button>
-                            ) : (
-                              <button onClick={() => setShareReview(r)} className="mt-1 text-[10px] font-bold bg-white border border-stone-200 text-stone-500 px-2 py-1 rounded cursor-pointer">영수증 보기</button>
-                            )}
+
+                            <div className="flex gap-1 mt-1">
+                              <button onClick={() => setShareReview(r)} className="text-[10px] font-bold bg-white border border-stone-200 text-stone-500 px-2 py-1 rounded hover:bg-stone-50 transition-colors cursor-pointer">영수증 보기</button>
+                              {isHost && (
+                                <button onClick={() => handleFinalResultKakaoShare(r, true)} className="text-[10px] font-bold bg-stone-800 text-white px-2 py-1 rounded hover:bg-black transition-colors cursor-pointer">이 맛집으로 결정</button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       )
                     })}
                     {(roomData?.nearbyExternal || []).map((p: any, i: number) => {
-                      // 🌟 (버그 수정 5) 외부 맛집 리스트도 내 저장 리스트와 교차 검증
                       const myFavReview = reviews.find(r =>
                         (r.placeId && p.id && r.placeId === p.id) ||
                         (r.storeName && p.place_name && (normalize(r.storeName).includes(normalize(p.place_name)) || normalize(p.place_name).includes(normalize(r.storeName))))
@@ -1775,15 +1866,18 @@ export default function Home() {
                           </a>
                           <div className="flex flex-col items-end shrink-0 gap-1.5 ml-2">
                             <span className="text-[10px] font-extrabold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">{p.distance}m</span>
-                            {isHost ? (
-                              <button onClick={() => handleFinalResultKakaoShare(p, false)} className="text-[10px] font-bold bg-stone-800 text-white px-2 py-1 rounded hover:bg-black transition-colors cursor-pointer">이 맛집으로 결정</button>
-                            ) : (
-                              isMyFav ? (
+
+                            <div className="flex gap-1 mt-1">
+                              {isMyFav ? (
                                 <button onClick={(e) => { e.preventDefault(); setShareReview(myFavReview); }} className="text-[10px] font-bold bg-white border border-stone-200 text-stone-500 px-2 py-1 rounded hover:bg-stone-50 transition-colors cursor-pointer">영수증 보기</button>
                               ) : (
-                                <button onClick={(e) => { e.preventDefault(); handleScrapPlace(p); }} className="text-[10px] font-bold bg-orange-500 text-white px-2 py-1 rounded hover:bg-orange-600 transition-colors cursor-pointer">+ 저장</button>
-                              )
-                            )}
+                                <a href={p.place_url} target="_blank" className="text-[10px] font-bold bg-stone-100 text-stone-500 px-2 py-1 rounded hover:bg-stone-200 transition-colors cursor-pointer">카카오맵 보기</a>
+                              )}
+
+                              {isHost && (
+                                <button onClick={() => handleFinalResultKakaoShare(p, false)} className="text-[10px] font-bold bg-stone-800 text-white px-2 py-1 rounded hover:bg-black transition-colors cursor-pointer">이 맛집으로 결정</button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       )
@@ -1967,64 +2061,69 @@ export default function Home() {
       {shareReview && (
         <div className="fixed inset-0 z-[250] flex items-center justify-center p-0 sm:p-6" onClick={() => setShareReview(null)}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div className="relative z-10 flex flex-col w-full h-full sm:h-auto sm:max-h-[90vh] max-w-md bg-[#FFFDF6] sm:rounded-[2rem] sm:border border-stone-200 shadow-2xl overflow-hidden animate-in zoom-in-95 sm:slide-in-from-bottom-0 slide-in-from-bottom-full duration-300" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center w-full p-5 shrink-0 bg-white border-b border-orange-50">
-              <h3 className="text-lg font-bold text-stone-800 flex items-center gap-2"><Share2 size={18} className="text-orange-500" /> 맛집 영수증</h3>
-              <button onClick={() => setShareReview(null)} className="p-1.5 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 transition-colors cursor-pointer"><X size={18} /></button>
-            </div>
-            <div className="flex-1 overflow-y-auto w-full px-4 pt-6 flex flex-col items-center pb-6 scrollbar-hide">
-              {shareReview.imageUrls && shareReview.imageUrls.length > 1 && (
-                <div className="flex gap-2 mb-4 w-[300px] overflow-x-auto scrollbar-hide pb-2 shrink-0">
-                  {shareReview.imageUrls.map((url: string, idx: number) => (
-                    <button key={idx} onClick={() => setReceiptImageIndex(idx)} className={`w-12 h-12 shrink-0 rounded-lg border-2 overflow-hidden ${idx === receiptImageIndex ? 'border-orange-500 shadow-md' : 'border-transparent opacity-50'} cursor-pointer`}>
-                      <img src={url} crossOrigin="anonymous" className="w-full h-full object-cover" />
-                    </button>
-                  ))}
+          {(() => {
+            const receiptImages = (shareReview.isMerged ? shareReview.mergedImages : shareReview.imageUrls) || [];
+            return (
+              <div className="relative z-10 flex flex-col w-full h-full sm:h-auto sm:max-h-[90vh] max-w-md bg-[#FFFDF6] sm:rounded-[2rem] sm:border border-stone-200 shadow-2xl overflow-hidden animate-in zoom-in-95 sm:slide-in-from-bottom-0 slide-in-from-bottom-full duration-300" onClick={(e) => e.stopPropagation()}>
+                <div className="flex justify-between items-center w-full p-5 shrink-0 bg-white border-b border-orange-50">
+                  <h3 className="text-lg font-bold text-stone-800 flex items-center gap-2"><Share2 size={18} className="text-orange-500" /> 맛집 영수증</h3>
+                  <button onClick={() => setShareReview(null)} className="p-1.5 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 transition-colors cursor-pointer"><X size={18} /></button>
                 </div>
-              )}
-              <div ref={receiptRef} className="bg-white w-[300px] p-6 shadow-2xl relative overflow-hidden shrink-0 border border-stone-100" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
-                <div className="absolute top-0 left-0 right-0 h-2 bg-transparent" style={{ backgroundImage: "linear-gradient(-45deg, transparent 4px, white 4px), linear-gradient(45deg, transparent 4px, white 4px)", backgroundSize: "8px 8px" }} />
-                <div className="border-b-2 border-dashed border-stone-300 pb-4 mb-4 text-center mt-2">
-                  <h2 className="text-2xl font-black text-stone-800 tracking-tighter uppercase">TODAY FOOD</h2>
-                  <p className="text-[10px] text-stone-500 mt-1">맛있는 기억을 기록하다</p>
-                </div>
-                {shareReview.imageUrls && shareReview.imageUrls[receiptImageIndex] && (
-                  <div className="mb-4 rounded-xl border border-stone-200 p-1 bg-stone-50"><img src={shareReview.imageUrls[receiptImageIndex]} crossOrigin="anonymous" className="w-full h-40 object-cover rounded-lg" /></div>
-                )}
-                <div className="space-y-2 mb-4">
-                  <div className="flex justify-between items-end border-b border-stone-100 pb-1"><span className="text-[11px] text-stone-400 font-bold">STORE</span><span className="text-lg font-black text-stone-800 truncate pl-4">{shareReview.storeName}</span></div>
-                  <div className="flex justify-between items-end border-b border-stone-100 pb-1"><span className="text-[11px] text-stone-400 font-bold">MENU</span><span className="text-sm font-bold text-stone-600 truncate pl-4">{shareReview.menu}</span></div>
-                  <div className="flex justify-between items-end pb-1"><span className="text-[11px] text-stone-400 font-bold">RATING</span><span className="text-sm font-bold text-amber-500">{"★".repeat(shareReview.rating)}{"☆".repeat(5 - shareReview.rating)}</span></div>
-                </div>
-                <div className="border-t-2 border-dashed border-stone-300 pt-4 mb-2"><p className="text-sm font-medium text-stone-700 italic text-center break-keep bg-stone-50 p-3 rounded-xl">"{shareReview.comment}"</p></div>
-                <div className="flex flex-col items-center justify-center mt-6 mb-2">
-                  <div className="p-1.5 bg-white border border-stone-200 rounded-xl shadow-sm mb-2">
-                    <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`${window.location.origin}/?uid=${shareReview.userId || user?.uid}&rid=${shareReview.id}`)}`} crossOrigin="anonymous" className="w-16 h-16 opacity-90" />
+                <div className="flex-1 overflow-y-auto w-full px-4 pt-6 flex flex-col items-center pb-6 scrollbar-hide">
+                  {receiptImages.length > 1 && (
+                    <div className="flex gap-2 mb-4 w-[300px] overflow-x-auto scrollbar-hide pb-2 shrink-0">
+                      {receiptImages.map((url: string, idx: number) => (
+                        <button key={idx} onClick={() => setReceiptImageIndex(idx)} className={`w-12 h-12 shrink-0 rounded-lg border-2 overflow-hidden ${idx === receiptImageIndex ? 'border-orange-500 shadow-md' : 'border-transparent opacity-50'} cursor-pointer`}>
+                          <img src={url} crossOrigin="anonymous" className="w-full h-full object-cover" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <div ref={receiptRef} className="bg-white w-[300px] p-6 shadow-2xl relative overflow-hidden shrink-0 border border-stone-100" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
+                    <div className="absolute top-0 left-0 right-0 h-2 bg-transparent" style={{ backgroundImage: "linear-gradient(-45deg, transparent 4px, white 4px), linear-gradient(45deg, transparent 4px, white 4px)", backgroundSize: "8px 8px" }} />
+                    <div className="border-b-2 border-dashed border-stone-300 pb-4 mb-4 text-center mt-2">
+                      <h2 className="text-2xl font-black text-stone-800 tracking-tighter uppercase">TODAY FOOD</h2>
+                      <p className="text-[10px] text-stone-500 mt-1">맛있는 기억을 기록하다</p>
+                    </div>
+                    {receiptImages[receiptImageIndex] && (
+                      <div className="mb-4 rounded-xl border border-stone-200 p-1 bg-stone-50"><img src={receiptImages[receiptImageIndex]} crossOrigin="anonymous" className="w-full h-40 object-cover rounded-lg" /></div>
+                    )}
+                    <div className="space-y-2 mb-4">
+                      <div className="flex justify-between items-end border-b border-stone-100 pb-1"><span className="text-[11px] text-stone-400 font-bold">STORE</span><span className="text-lg font-black text-stone-800 truncate pl-4">{shareReview.storeName}</span></div>
+                      <div className="flex justify-between items-end border-b border-stone-100 pb-1"><span className="text-[11px] text-stone-400 font-bold">MENU</span><span className="text-sm font-bold text-stone-600 truncate pl-4">{shareReview.menu}</span></div>
+                      <div className="flex justify-between items-end pb-1"><span className="text-[11px] text-stone-400 font-bold">RATING</span><span className="text-sm font-bold text-amber-500">{"★".repeat(shareReview.rating)}{"☆".repeat(5 - shareReview.rating)}</span></div>
+                    </div>
+                    <div className="border-t-2 border-dashed border-stone-300 pt-4 mb-2"><p className="text-sm font-medium text-stone-700 italic text-center break-keep bg-stone-50 p-3 rounded-xl">"{shareReview.comment}"</p></div>
+                    <div className="flex flex-col items-center justify-center mt-6 mb-2">
+                      <div className="p-1.5 bg-white border border-stone-200 rounded-xl shadow-sm mb-2">
+                        <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`${window.location.origin}/?uid=${shareReview.userId || user?.uid}&rid=${shareReview.id}`)}`} crossOrigin="anonymous" className="w-16 h-16 opacity-90" />
+                      </div>
+                      <p className="text-[10px] text-stone-500 font-bold tracking-widest">SCAN TO SAVE</p>
+                    </div>
+                    <div className="absolute bottom-0 left-0 right-0 h-2 bg-transparent rotate-180" style={{ backgroundImage: "linear-gradient(-45deg, transparent 4px, white 4px), linear-gradient(45deg, transparent 4px, white 4px)", backgroundSize: "8px 8px" }} />
                   </div>
-                  <p className="text-[10px] text-stone-500 font-bold tracking-widest">SCAN TO SAVE</p>
-                </div>
-                <div className="absolute bottom-0 left-0 right-0 h-2 bg-transparent rotate-180" style={{ backgroundImage: "linear-gradient(-45deg, transparent 4px, white 4px), linear-gradient(45deg, transparent 4px, white 4px)", backgroundSize: "8px 8px" }} />
-              </div>
-            </div>
-
-            <div className="shrink-0 w-full p-4 bg-white border-t border-stone-100 pb-8 sm:pb-5">
-              <div className="flex flex-col gap-2 w-full max-w-[300px] mx-auto">
-                <button onClick={handleKakaoShare} className="w-full bg-[#FEE500] hover:bg-[#FDD800] text-stone-900 font-black py-3.5 rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer"><MessageCircle size={18} className="fill-stone-900" /> 카카오톡으로 공유하기</button>
-
-                <div className="mt-2 pt-3 border-t border-stone-100">
-                  <p className="text-[11px] text-stone-500 font-bold mb-2 text-center flex items-center justify-center gap-1"><MapPin size={12} /> 이 맛집의 위치와 후기가 궁금하다면?</p>
-                  <a href={`https://map.kakao.com/link/search/${encodeURIComponent(shareReview.storeName)}`} target="_blank" rel="noopener noreferrer" className="w-full bg-stone-800 hover:bg-black text-white font-black py-3.5 rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer transition-colors text-sm">
-                    카카오맵에서 맛집 보기
-                  </a>
                 </div>
 
-                <div className="flex gap-2 mt-1">
-                  <button onClick={handleDownloadReceipt} disabled={isGeneratingImage} className="flex-1 bg-stone-50 text-stone-800 text-sm font-bold py-3.5 rounded-xl shadow-sm border border-stone-200 flex items-center justify-center gap-2 cursor-pointer">{isGeneratingImage ? <Loader2 size={16} className="animate-spin text-orange-500" /> : <Download size={16} className="text-orange-500" />} 이미지 저장</button>
-                  <button onClick={handleCopyLink} className="flex-1 bg-stone-50 text-stone-800 text-sm font-bold py-3.5 rounded-xl shadow-sm border border-stone-200 flex items-center justify-center gap-2 cursor-pointer"><Copy size={16} className="text-blue-500" /> 링크 복사</button>
+                <div className="shrink-0 w-full p-4 bg-white border-t border-stone-100 pb-8 sm:pb-5">
+                  <div className="flex flex-col gap-2 w-full max-w-[300px] mx-auto">
+                    <button onClick={handleKakaoShare} className="w-full bg-[#FEE500] hover:bg-[#FDD800] text-stone-900 font-black py-3.5 rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer"><MessageCircle size={18} className="fill-stone-900" /> 카카오톡으로 공유하기</button>
+
+                    <div className="mt-2 pt-3 border-t border-stone-100">
+                      <p className="text-[11px] text-stone-500 font-bold mb-2 text-center flex items-center justify-center gap-1"><MapPin size={12} /> 이 맛집의 위치와 후기가 궁금하다면?</p>
+                      <a href={`https://map.kakao.com/link/search/${encodeURIComponent(shareReview.storeName)}`} target="_blank" rel="noopener noreferrer" className="w-full bg-stone-800 hover:bg-black text-white font-black py-3.5 rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer transition-colors text-sm">
+                        카카오맵에서 맛집 보기
+                      </a>
+                    </div>
+
+                    <div className="flex gap-2 mt-1">
+                      <button onClick={handleDownloadReceipt} disabled={isGeneratingImage} className="flex-1 bg-stone-50 text-stone-800 text-sm font-bold py-3.5 rounded-xl shadow-sm border border-stone-200 flex items-center justify-center gap-2 cursor-pointer">{isGeneratingImage ? <Loader2 size={16} className="animate-spin text-orange-500" /> : <Download size={16} className="text-orange-500" />} 이미지 저장</button>
+                      <button onClick={handleCopyLink} className="flex-1 bg-stone-50 text-stone-800 text-sm font-bold py-3.5 rounded-xl shadow-sm border border-stone-200 flex items-center justify-center gap-2 cursor-pointer"><Copy size={16} className="text-blue-500" /> 링크 복사</button>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
+            );
+          })()}
         </div>
       )}
 
