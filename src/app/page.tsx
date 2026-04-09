@@ -121,9 +121,15 @@ interface Review {
   placeId?: string; placeUrl?: string; address?: string;
 }
 
-const KAKAO_JS_KEY = "6d8e9624fa45bf20fe85ee7dc75aa28d";
-const KAKAO_REST_KEY = "deb0556cf6ab2cc0e38a558fd65ae01b";
+// =========================================================================
+// 🌟 [중요] 여기에 기획자님의 API 키를 꼭 입력해주세요!
+// =========================================================================
+const KAKAO_JS_KEY = "6d8e9624fa45bf20fe85ee7dc75aa28d";   // 카톡 공유/초대용 (JavaScript 키)
+const KAKAO_REST_KEY = "deb0556cf6ab2cc0e38a558fd65ae01b"; // 식당 검색용 (REST API 키)
 
+// =========================================================================
+// 🌟 격리된 순수 컴포넌트들 (타이핑 렉 방지 및 재사용)
+// =========================================================================
 const PlaceSearchModal = ({ onClose, onSelectTarget, initialQuery = "" }: { onClose: () => void, onSelectTarget: (place: any) => void, initialQuery?: string }) => {
   const [query, setQuery] = useState(initialQuery);
   const [debouncedQuery, setDebouncedQuery] = useState(initialQuery);
@@ -131,11 +137,13 @@ const PlaceSearchModal = ({ onClose, onSelectTarget, initialQuery = "" }: { onCl
   const [isLoading, setIsLoading] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<any>(null);
 
+  // 0.5초 디바운스 적용
   useEffect(() => {
     const handler = setTimeout(() => { setDebouncedQuery(query); }, 500);
     return () => clearTimeout(handler);
   }, [query]);
 
+  // 키워드로 카카오 API 검색 (음식점, 카페만 필터링)
   useEffect(() => {
     if (debouncedQuery.trim()) {
       const fetchPlaces = async () => {
@@ -145,6 +153,7 @@ const PlaceSearchModal = ({ onClose, onSelectTarget, initialQuery = "" }: { onCl
             headers: { Authorization: `KakaoAK ${KAKAO_REST_KEY}` }
           });
           const data = await res.json();
+          // FD6(음식점), CE7(카페) 만 추출
           setResults((data.documents || []).filter((p: any) => ['FD6', 'CE7'].includes(p.category_group_code)));
         } catch (e) { }
         setIsLoading(false);
@@ -344,6 +353,7 @@ export default function Home() {
     if (!roomData || !tinderItems.length) return [];
     const counts: Record<string, number> = {};
 
+    // 🌟 (개선 3) 무조건 0표로 기본 렌더링 세팅!
     tinderItems.forEach((item: any) => {
       const id = item.type === 'menu' ? item.name : item.data.id;
       counts[id] = 0;
@@ -390,7 +400,15 @@ export default function Home() {
   const myName = user ? profileNickname : guestId;
   const isHost = roomData?.hostUid === myId;
 
+  // 🌟 (개선 4) 대기방에서 나갈 때 참가자 명단에서 완전히 삭제
   const handleCloseTinder = async () => {
+    if (tinderState === 'share_room' && !isHost) {
+      if (window.confirm("투표 대기방에서 나가시겠습니까?")) {
+        if (tinderRoomId) await updateDoc(doc(db, "rooms", tinderRoomId), { participants: arrayRemove(myName) });
+        closeTinderFlow();
+      }
+      return;
+    }
     if (window.confirm("투표방을 나가시겠습니까?\n방장이 나갈 경우 투표방이 폭파됩니다.")) {
       if (isHost && tinderRoomId) {
         await updateDoc(doc(db, "rooms", tinderRoomId), { status: 'destroyed' });
@@ -477,27 +495,43 @@ export default function Home() {
     }
   }, [authLoading, myName]);
 
+  // 🌟 (개선 5) 이미 저장된 맛집인지 placeId로 확인 후 영수증 띄워줌
   useEffect(() => {
-    const stored = sessionStorage.getItem('pendingImport');
-    if (stored && !authLoading) {
-      if (user) {
-        const data = JSON.parse(stored);
-        resetForm();
-        setStoreName(data.storeName || ""); setMenu(data.menu || "");
-        setCategory(knownCategories.includes(data.category) ? data.category : "기타");
-        if (!knownCategories.includes(data.category)) { setCustomCategory(data.category); setShowCustomCategory(true); }
-        setRating(Number(data.rating) || 5); setComment(data.comment || ""); setImportedUrls(data.imageUrls || []);
-        setPlaceId(data.placeId || ""); setPlaceUrl(data.placeUrl || ""); setAddress(data.address || "");
-        sessionStorage.removeItem('pendingImport');
-        setPendingImport(true);
-        setIsScrapModalOpen(true);
-      } else {
-        setAuthMode("signup");
-        setIsAuthModalOpen(true);
+    const checkAndImport = async () => {
+      const stored = sessionStorage.getItem('pendingImport');
+      if (stored && !authLoading) {
+        if (user) {
+          const data = JSON.parse(stored);
+          sessionStorage.removeItem('pendingImport');
+
+          if (data.placeId) {
+            const qSnap = await getDocs(query(collection(db, "users", user.uid, "reviews"), where("placeId", "==", data.placeId), limit(1)));
+            if (!qSnap.empty) {
+              alert("이미 내 맛집 리스트에 저장된 곳입니다!");
+              const existingDoc = qSnap.docs[0];
+              setShareReview({ id: existingDoc.id, ...existingDoc.data() } as Review);
+              return;
+            }
+          }
+
+          resetForm();
+          setStoreName(data.storeName || ""); setMenu(data.menu || "");
+          setCategory(knownCategories.includes(data.category) ? data.category : "기타");
+          if (!knownCategories.includes(data.category)) { setCustomCategory(data.category); setShowCustomCategory(true); }
+          setRating(Number(data.rating) || 5); setComment(data.comment || ""); setImportedUrls(data.imageUrls || []);
+          setPlaceId(data.placeId || ""); setPlaceUrl(data.placeUrl || ""); setAddress(data.address || "");
+          setPendingImport(true);
+          setIsScrapModalOpen(true);
+        } else {
+          setAuthMode("signup");
+          setIsAuthModalOpen(true);
+        }
       }
-    }
+    };
+    checkAndImport();
   }, [user, authLoading, pendingImportTrigger, knownCategories]);
 
+  // 🌟 (버그 수정 1) 로그인 유저 방 입장 시 익명 ID 완벽 클렌징
   const joinRoom = async (roomId: string) => {
     try {
       const roomRef = doc(db, "rooms", roomId);
@@ -506,9 +540,8 @@ export default function Home() {
         const rData = roomDoc.data();
         if (rData.status !== 'closed' && rData.status !== 'reveal' && rData.status !== 'destroyed') {
           setTimeout(async () => {
-            const updates: any = { participants: arrayUnion(myName) };
-            if (user && guestId) updates.participants = arrayRemove(guestId);
-            await updateDoc(roomRef, updates);
+            if (user && guestId) await updateDoc(roomRef, { participants: arrayRemove(guestId) }).catch(e => { });
+            await updateDoc(roomRef, { participants: arrayUnion(myName) }).catch(e => { });
           }, 500);
         }
         setTinderRoomId(roomId); setTinderMode(rData.mode); setTinderItems(rData.items || []);
@@ -612,6 +645,9 @@ export default function Home() {
     return () => unsubs.forEach(fn => fn());
   }, [user, showGroupRecords, partnerUids, filterCategory, profileNickname, profilePhotoUrl, partnersData]);
 
+  // -------------------------------------------------------------
+  // Handlers
+  // -------------------------------------------------------------
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault(); if (!user) return; setIsSavingProfile(true);
     try {
@@ -821,6 +857,7 @@ export default function Home() {
     });
   };
 
+  // 🌟 (버그 수정 3) 최종 결과 공유 후 방 폭파하지 않고 유지
   const handleFinalResultKakaoShare = async (place: any, isSavedPlace: boolean) => {
     executeKakaoShare(async (kakao) => {
       const linkUrl = isSavedPlace ? `${window.location.origin}/?uid=${place.userId || user?.uid}&rid=${place.id}` : place.place_url;
@@ -837,13 +874,7 @@ export default function Home() {
         buttons: [{ title: isSavedPlace ? '영수증 확인하기' : '카카오맵에서 보기', link: { mobileWebUrl: linkUrl, webUrl: linkUrl } }],
       });
 
-      if (isHost && tinderRoomId) {
-        await updateDoc(doc(db, "rooms", tinderRoomId), { status: 'destroyed' });
-      }
-      setTimeout(() => {
-        alert("카카오톡으로 최종 결과가 공유되었습니다!\n투표방을 종료합니다.");
-        closeTinderFlow();
-      }, 500);
+      alert("카카오톡으로 공유되었습니다!");
     });
   };
 
@@ -863,13 +894,7 @@ export default function Home() {
         buttons: [{ title: '맛집 정보 보기', link: { mobileWebUrl: url, webUrl: url } }],
       });
 
-      if (isHost && tinderRoomId) {
-        await updateDoc(doc(db, "rooms", tinderRoomId), { status: 'destroyed' });
-      }
-      setTimeout(() => {
-        alert("카카오톡으로 1위 결과가 공유되었습니다!\n투표방을 종료합니다.");
-        closeTinderFlow();
-      }, 500);
+      alert("카카오톡으로 공유되었습니다!");
     });
   };
 
@@ -1024,10 +1049,7 @@ export default function Home() {
     setIsLocating(false);
   };
 
-  // -------------------------------------------------------------
-  // Render
-  // -------------------------------------------------------------
-
+  // 🌟 (개선 4) 카카오톡 튕김 시 안내 UI 복구 (return null 대신 표시)
   if (isKakaoBrowser) {
     return (
       <div className="min-h-screen bg-stone-900 flex flex-col items-center justify-center text-white p-6 z-[9999] fixed inset-0">
@@ -1475,8 +1497,9 @@ export default function Home() {
 
               {(() => {
                 const maxVotes = roomLeaderboard.length > 0 ? Math.max(...roomLeaderboard.map(r => r.count)) : 0;
-                const isFailed = maxVotes <= 1;
-                const isTie = maxVotes > 1 && roomLeaderboard.filter(r => r.count === maxVotes).length > 1;
+                // 🌟 (버그 수정 3) 1표 이상이어도 실패 처리되던 문제 해결 -> 오직 아무도 안 눌렀을 때만 실패!
+                const isFailed = maxVotes === 0;
+                const isTie = maxVotes > 0 && roomLeaderboard.filter(r => r.count === maxVotes).length > 1;
 
                 if (roomData?.status === 'closed' && isFailed) {
                   return (
@@ -1560,7 +1583,13 @@ export default function Home() {
                         )
                       ) : (
                         isHost ? (
-                          <button onClick={() => updateDoc(doc(db, "rooms", tinderRoomId!), { status: 'closed' })} className="w-full bg-rose-500 hover:bg-rose-600 text-white font-black py-3.5 rounded-xl shadow-md transition-colors text-sm cursor-pointer">
+                          <button onClick={() => {
+                            const allVoted = roomData?.completedUsers?.length === roomData?.participants?.length;
+                            if (!allVoted) {
+                              if (!window.confirm("아직 투표하지 않은 인원이 있습니다. 그래도 투표를 마감하시겠습니까?")) return;
+                            }
+                            updateDoc(doc(db, "rooms", tinderRoomId!), { status: 'closed' });
+                          }} className="w-full bg-rose-500 hover:bg-rose-600 text-white font-black py-3.5 rounded-xl shadow-md transition-colors text-sm cursor-pointer">
                             투표 마감하기 (결과 확인)
                           </button>
                         ) : (
@@ -1861,7 +1890,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* 영수증 모달 및 공유 (z-250) */}
       {shareReview && (
         <div className="fixed inset-0 z-[250] flex items-center justify-center p-0 sm:p-6" onClick={() => setShareReview(null)}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
