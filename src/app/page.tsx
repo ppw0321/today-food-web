@@ -34,8 +34,8 @@ const DEFAULT_CATEGORIES = ["한식", "중식", "일식", "양식", "카페", "�
 
 const CATEGORY_KEYWORDS: Record<string, string[]> = {
   "한식": ["찌개", "국밥", "볶음", "구이", "찜", "전", "김치", "된장", "순대국", "해장", "삼겹", "제육", "비빔", "칼국수", "냉면", "수제비", "설렁탕", "갈비탕", "감자탕", "불고기", "백반", "국수", "막국수", "탕", "국", "밥", "돼지갈비", "갈비", "목살", "치킨", "통닭", "밀면", "항정살", "갈매기", "육회", "곱창", "막창", "대창", "닭갈비", "닭발", "아구찜", "해물찜", "족발", "보쌈", "차돌박이", "대패", "오리", "청국장", "곰탕", "쭈꾸미", "낙지"],
-  "중식": ["짜장", "짬뽕", "탕수", "탕수육", "마라", "마라샹궈", "볶음밥", "만두", "자장", "꿔바로우", "유산슬", "양꼬치", "훠궈", "마파두부", "깐풍기", "우육면"],
-  "일식": ["초밥", "스시", "라멘", "우동", "돈까스", "카츠", "사시미", "회", "소바", "텐동", "덮밥", "가라아게", "오꼬노미야끼", "타코야끼", "규동", "카레", "연어", "참치", "마제"],
+  "중식": ["짜장", "짬뽕", "볶음짬뽕", "탕수", "탕수육", "마라", "마라샹궈", "볶음밥", "만두", "자장", "꿔바로우", "유산슬", "양꼬치", "훠궈", "마파두부", "깐풍기", "우육면"],
+  "일식": ["초밥", "스시", "라멘", "우동", "돈까스", "카츠", "사시미", "회", "소바", "텐동", "덮밥", "가라아게", "오꼬노미야끼", "타코야끼", "규동", "카레", "연어", "참치", "마제", "사케동", "연어덮밥"],
   "양식": ["피자", "파스타", "버거", "스테이크", "햄버거", "리조또", "샐러드", "샌드위치", "바베큐", "스프", "필라프", "브런치", "오일", "크림", "토마토"],
   "카페": ["커피", "라떼", "디저트", "케이크", "빵", "브런치", "와플", "마카롱", "빙수", "스무디", "에이드"],
   "분식": ["떡볶이", "순대", "튀김", "라볶이", "김밥", "오뎅", "어묵", "쫄면", "라면", "컵밥", "핫도그", "닭강정"],
@@ -119,7 +119,7 @@ const getCurrentBadge = (count: number) => {
 interface Review {
   id: string; storeName: string; menu: string; rating: number; comment: string; category: string; imageUrls?: string[]; userId?: string; userPhoto?: string; userName?: string; createdAt?: any;
   placeId?: string; placeUrl?: string; address?: string;
-  isMerged?: boolean; mergedImages?: string[]; mergedComments?: any[]; // 🌟 병합용 타입 추가
+  isMerged?: boolean; mergedImages?: string[]; mergedComments?: any[]; mergedMenu?: string;
 }
 
 // =========================================================================
@@ -380,11 +380,15 @@ export default function Home() {
         ...others.map(o => ({ userId: o.userId, userName: o.userName, userPhoto: o.userPhoto, rating: o.rating, comment: o.comment }))
       ];
 
+      const allMenus = Array.from(new Set([base.menu, ...others.map(o => o.menu)].filter(Boolean)));
+      const mergedMenu = allMenus.length > 2 ? `${allMenus[0]} 외 ${allMenus.length - 1}개` : allMenus.join(' / ');
+
       return {
         ...base,
         isMerged: true,
         mergedImages,
-        mergedComments
+        mergedComments,
+        mergedMenu
       };
     });
   }, [filteredReviews, showGroupRecords, user]);
@@ -780,17 +784,25 @@ export default function Home() {
       const saved: Review[] = []; const external: any[] = [];
 
       places.forEach((p: any) => {
-        const matched = reviews.find((r: Review) => {
+        const matchedReviews = reviews.filter((r: Review) => {
           if (r.placeId && p.id && r.placeId === p.id) return true;
           return normalize(r.storeName).includes(normalize(p.place_name)) || normalize(p.place_name).includes(normalize(r.storeName));
         });
 
-        if (matched) {
-          if (!saved.some((s: Review) => s.id === matched.id)) saved.push(matched);
-        } else {
-          if (external.length < 5) external.push(p);
+        if (matchedReviews.length > 0) {
+          const hasMatchingMenu = matchedReviews.some(mr =>
+            normalize(mr.menu).includes(normalize(menu)) || normalize(mr.category).includes(normalize(menu)) || normalize(mr.storeName).includes(normalize(menu))
+          );
+          if (hasMatchingMenu) {
+            const baseMatched = matchedReviews.find(mr => mr.userId === user?.uid) || matchedReviews[0];
+            if (!saved.some((s: Review) => s.id === baseMatched.id)) saved.push(baseMatched);
+          } else {
+            if (external.length < 5) external.push(p);
+          }
         }
+        else { if (external.length < 5) external.push(p); }
       });
+
       setNearbySaved(saved); setNearbyExternal(external);
     } catch (e) { setLocationError("주변 검색 실패"); }
     setIsLocating(false);
@@ -951,7 +963,7 @@ export default function Home() {
         content: {
           title: `🏆 오늘 우리의 최종 선택!`,
           description: `1위로 선정된 [${winnerData.storeName}]\n지금 바로 확인해보세요!`,
-          imageUrl: winnerData.imageUrls?.[0] || 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1',
+          imageUrl: (winnerData.isMerged ? winnerData.mergedImages : winnerData.imageUrls)?.[0] || 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1',
           link: { mobileWebUrl: url, webUrl: url }
         },
         buttons: [{ title: '맛집 정보 보기', link: { mobileWebUrl: url, webUrl: url } }],
@@ -1014,7 +1026,7 @@ export default function Home() {
       const shuffled = [...BASE_MENUS].sort(() => 0.5 - Math.random()).slice(0, 10);
       generatedItems = shuffled.map(m => ({ type: 'menu', name: m, category: getMenuCategory(m) || "기타", theme: getMenuIconDetails(m, getMenuCategory(m) || "기타") }));
     } else {
-      const shuffled = [...filteredReviews].sort(() => 0.5 - Math.random()).slice(0, 10);
+      const shuffled = [...mergedReviews].sort(() => 0.5 - Math.random()).slice(0, 10);
       generatedItems = shuffled.map(r => ({ type: 'restaurant', data: r }));
     }
     try {
@@ -1033,7 +1045,7 @@ export default function Home() {
       const shuffled = [...BASE_MENUS].sort(() => 0.5 - Math.random()).slice(0, 10);
       generatedItems = shuffled.map(m => ({ type: 'menu', name: m, category: getMenuCategory(m) || "기타", theme: getMenuIconDetails(m, getMenuCategory(m) || "기타") }));
     } else {
-      const shuffled = [...filteredReviews].sort(() => 0.5 - Math.random()).slice(0, 10);
+      const shuffled = [...mergedReviews].sort(() => 0.5 - Math.random()).slice(0, 10);
       generatedItems = shuffled.map(r => ({ type: 'restaurant', data: r }));
     }
     try {
@@ -1095,14 +1107,18 @@ export default function Home() {
       const saved: Review[] = []; const external: any[] = [];
 
       places.forEach((p: any) => {
-        const matched = reviews.find((r: Review) => {
+        const matchedReviews = reviews.filter((r: Review) => {
           if (r.placeId && p.id && r.placeId === p.id) return true;
           return normalize(r.storeName).includes(normalize(p.place_name)) || normalize(p.place_name).includes(normalize(r.storeName));
         });
 
-        if (matched) {
-          if (normalize(matched.menu).includes(normalize(menuName)) || normalize(matched.category).includes(normalize(menuName)) || normalize(matched.storeName).includes(normalize(menuName))) {
-            if (!saved.some((s: Review) => s.id === matched.id)) saved.push(matched);
+        if (matchedReviews.length > 0) {
+          const hasMatchingMenu = matchedReviews.some(mr =>
+            normalize(mr.menu).includes(normalize(menuName)) || normalize(mr.category).includes(normalize(menuName)) || normalize(mr.storeName).includes(normalize(menuName))
+          );
+          if (hasMatchingMenu) {
+            const baseMatched = matchedReviews.find(mr => mr.userId === user?.uid) || matchedReviews[0];
+            if (!saved.some((s: Review) => s.id === baseMatched.id)) saved.push(baseMatched);
           } else {
             if (external.length < 5) external.push(p);
           }
@@ -1140,7 +1156,6 @@ export default function Home() {
     );
   }
 
-  // 🌟 (버그 수정) 타입스크립트 에러 방지 (null 체크 강화)
   const renderReviewList = () => {
     if (mergedReviews.length === 0) {
       return <div className="py-12 text-center bg-white rounded-3xl border border-stone-100"><p className="text-stone-500 font-bold mb-1">저장된 맛집이 없어요 🥲</p></div>;
@@ -1177,36 +1192,34 @@ export default function Home() {
                   ))}
                 </div>
               )}
-              <div className="p-5 flex-1 flex flex-col">
+              <div className="p-5 flex-1 flex flex-col min-w-0">
                 <div className="flex justify-between items-start gap-3 mb-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 mb-1">
                       <h3 className="font-bold text-lg text-stone-800 truncate leading-tight">{review.storeName}</h3>
                       {review.placeUrl && <a href={review.placeUrl} target="_blank" className="text-blue-500 hover:text-blue-600 shrink-0"><LinkIcon size={14} /></a>}
                     </div>
-                    <p className="text-orange-500 text-sm font-semibold truncate">{review.menu} | {review.category}</p>
+                    <p className="text-orange-500 text-sm font-semibold truncate">{review.isMerged ? review.mergedMenu : review.menu} | {review.category}</p>
                   </div>
                   <div className="flex gap-1 shrink-0 items-center">
                     <button onClick={() => { setShareReview(review); setReceiptImageIndex(0); }} className="p-2 bg-stone-50 rounded-lg text-stone-400 hover:text-blue-500 cursor-pointer"><Share2 size={14} /></button>
-                    {!review.isMerged && review.userId === user?.uid && (
+                    {review.userId === user?.uid && (
                       <>
                         <button onClick={() => openEditModal(review)} className="p-2 bg-stone-50 rounded-lg text-stone-400 hover:text-orange-500 cursor-pointer"><Pencil size={14} /></button>
                         <button onClick={() => handleDeleteReview(review.id)} className="p-2 bg-stone-50 rounded-lg text-stone-400 hover:text-red-500 cursor-pointer"><Trash2 size={14} /></button>
                       </>
                     )}
-                    {!review.isMerged && (
-                      <div className="flex items-center bg-amber-50 px-2 rounded-lg gap-1 shrink-0"><Star size={12} className="text-amber-500 fill-amber-500" /><span className="text-xs font-bold">{review.rating}.0</span></div>
-                    )}
+                    <div className="flex items-center bg-amber-50 px-2 rounded-lg gap-1 shrink-0"><Star size={12} className="text-amber-500 fill-amber-500" /><span className="text-xs font-bold">{review.rating}.0</span></div>
                   </div>
                 </div>
 
                 {review.isMerged ? (
-                  <div className="flex flex-col gap-2 mt-auto">
+                  <div className="flex overflow-x-auto snap-x scrollbar-hide gap-3 mt-auto pb-1 pt-2 w-full">
                     {displayComments.map((mc: any, i: number) => (
-                      <div key={i} className="bg-[#FFFDF6] p-3 rounded-2xl border border-orange-50/50 flex flex-col gap-1.5">
+                      <div key={i} className="snap-center shrink-0 w-[85%] bg-[#FFFDF6] p-4 rounded-2xl border border-orange-50/50 flex flex-col gap-2">
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5">
-                            {mc.userPhoto ? <img src={mc.userPhoto} className="w-5 h-5 rounded-full object-cover border border-stone-200" /> : <div className="w-5 h-5 rounded-full bg-stone-200 flex items-center justify-center text-[10px]"><User size={10} /></div>}
+                          <div className="flex items-center gap-2">
+                            {mc.userPhoto ? <img src={mc.userPhoto} className="w-6 h-6 rounded-full object-cover border border-stone-200" /> : <div className="w-6 h-6 rounded-full bg-stone-200 flex items-center justify-center text-[10px]"><User size={12} /></div>}
                             <span className="text-xs font-bold text-stone-700">{mc.userName}</span>
                           </div>
                           <div className="flex items-center gap-0.5"><Star size={12} className="text-amber-500 fill-amber-500" /><span className="text-xs font-bold">{mc.rating}.0</span></div>
@@ -1562,7 +1575,7 @@ export default function Home() {
                       style={{ zIndex, transform: transformStr }}
                     >
                       <div className={`w-full h-[55%] relative flex items-center justify-center shrink-0 ${item.type === 'menu' ? item.theme.bgColor : 'bg-stone-100'}`}>
-                        {item.type === 'menu' ? <span className="text-8xl drop-shadow-md select-none">{item.theme.emoji}</span> : (item.data.imageUrls?.[0] ? <img src={item.data.imageUrls[0]} className="absolute inset-0 w-full h-full object-cover pointer-events-none" /> : <UtensilsCrossed size={48} className="text-stone-300" />)}
+                        {item.type === 'menu' ? <span className="text-8xl drop-shadow-md select-none">{item.theme.emoji}</span> : ((item.data.isMerged ? item.data.mergedImages : item.data.imageUrls)?.[0] ? <img src={(item.data.isMerged ? item.data.mergedImages : item.data.imageUrls)[0]} className="absolute inset-0 w-full h-full object-cover pointer-events-none" /> : <UtensilsCrossed size={48} className="text-stone-300" />)}
                       </div>
                       <div className="w-full h-[45%] p-5 bg-white flex flex-col justify-center border-t border-stone-100">
                         {item.type === 'menu' ? (
@@ -1574,7 +1587,7 @@ export default function Home() {
                           <div>
                             <div className="flex items-center gap-2 mb-1.5"><span className="text-[10px] font-bold bg-stone-100 text-stone-500 px-2 py-0.5 rounded">{item.data.category}</span><div className="flex items-center text-[10px] font-bold text-amber-500"><Star size={10} className="fill-amber-500 mr-0.5" />{item.data.rating}.0</div></div>
                             <h3 className="text-xl font-black text-stone-800 truncate mb-1">{item.data.storeName}</h3>
-                            <p className="text-orange-500 text-xs font-bold truncate">{item.data.menu}</p>
+                            <p className="text-orange-500 text-xs font-bold truncate">{item.data.isMerged ? item.data.mergedMenu : item.data.menu}</p>
                             <p className="text-[11px] text-stone-400 mt-2 italic truncate break-keep line-clamp-2">"{item.data.comment}"</p>
                           </div>
                         )}
@@ -1673,10 +1686,10 @@ export default function Home() {
                               }`}
                           >
                             <div className="w-5 text-center font-black text-stone-400 text-xs shrink-0">{idx + 1}</div>
-                            {item.type === 'menu' ? <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 ${item.theme.bgColor}`}>{item.theme.emoji}</div> : <div className="w-10 h-10 rounded-xl bg-stone-200 overflow-hidden shrink-0">{item.data.imageUrls?.[0] ? <img src={item.data.imageUrls[0]} className="w-full h-full object-cover" /> : <UtensilsCrossed className="w-full h-full p-2 text-stone-400" />}</div>}
+                            {item.type === 'menu' ? <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 ${item.theme.bgColor}`}>{item.theme.emoji}</div> : <div className="w-10 h-10 rounded-xl bg-stone-200 overflow-hidden shrink-0">{(item.data.isMerged ? item.data.mergedImages : item.data.imageUrls)?.[0] ? <img src={(item.data.isMerged ? item.data.mergedImages : item.data.imageUrls)[0]} className="w-full h-full object-cover" /> : <UtensilsCrossed className="w-full h-full p-2 text-stone-400" />}</div>}
                             <div className="min-w-0 flex-1">
                               <h4 className={`font-black truncate text-sm ${(isSelectable && isSelected) || (!isSelectable && isTopTier) ? 'text-orange-600' : 'text-stone-800'}`}>{item.type === 'menu' ? item.name : item.data.storeName}</h4>
-                              <p className="text-[10px] text-stone-500 truncate">{item.type === 'menu' ? item.category : item.data.menu}</p>
+                              <p className="text-[10px] text-stone-500 truncate">{item.type === 'menu' ? item.category : (item.data.isMerged ? item.data.mergedMenu : item.data.menu)}</p>
                             </div>
                             <div className="shrink-0 flex items-center gap-1 bg-white px-2 py-1 rounded-md border border-stone-200 shadow-sm"><Heart size={10} className={isTopTier ? "text-rose-500 fill-rose-500" : "text-stone-400 fill-stone-400"} /><span className={`font-black text-[11px] ${isTopTier ? 'text-rose-600' : 'text-stone-600'}`}>{result.count}</span></div>
                             {isSelectable && isSelected && <Check size={16} className="text-orange-500 shrink-0 ml-1" />}
@@ -1755,7 +1768,7 @@ export default function Home() {
                   </>
                 ) : (
                   <>
-                    <div className="w-24 h-24 mx-auto rounded-2xl overflow-hidden mb-4 shadow-md border border-stone-100">{roomData.finalWinner.data.imageUrls?.[0] ? <img src={roomData.finalWinner.data.imageUrls[0]} className="w-full h-full object-cover" /> : <UtensilsCrossed className="w-full h-full p-4 bg-stone-200 text-stone-400" />}</div>
+                    <div className="w-24 h-24 mx-auto rounded-2xl overflow-hidden mb-4 shadow-md border border-stone-100">{(roomData.finalWinner.data.isMerged ? roomData.finalWinner.data.mergedImages : roomData.finalWinner.data.imageUrls)?.[0] ? <img src={(roomData.finalWinner.data.isMerged ? roomData.finalWinner.data.mergedImages : roomData.finalWinner.data.imageUrls)[0]} className="w-full h-full object-cover" /> : <UtensilsCrossed className="w-full h-full p-4 bg-stone-200 text-stone-400" />}</div>
                     <h3 className="text-2xl font-black text-stone-800 truncate tracking-tight w-full px-2">{roomData.finalWinner.data.storeName}</h3>
                   </>
                 )}
@@ -2058,74 +2071,75 @@ export default function Home() {
         </div>
       )}
 
-      {shareReview && (
-        <div className="fixed inset-0 z-[250] flex items-center justify-center p-0 sm:p-6" onClick={() => setShareReview(null)}>
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          {(() => {
-            const receiptImages = (shareReview.isMerged ? shareReview.mergedImages : shareReview.imageUrls) || [];
-            return (
-              <div className="relative z-10 flex flex-col w-full h-full sm:h-auto sm:max-h-[90vh] max-w-md bg-[#FFFDF6] sm:rounded-[2rem] sm:border border-stone-200 shadow-2xl overflow-hidden animate-in zoom-in-95 sm:slide-in-from-bottom-0 slide-in-from-bottom-full duration-300" onClick={(e) => e.stopPropagation()}>
-                <div className="flex justify-between items-center w-full p-5 shrink-0 bg-white border-b border-orange-50">
-                  <h3 className="text-lg font-bold text-stone-800 flex items-center gap-2"><Share2 size={18} className="text-orange-500" /> 맛집 영수증</h3>
-                  <button onClick={() => setShareReview(null)} className="p-1.5 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 transition-colors cursor-pointer"><X size={18} /></button>
-                </div>
-                <div className="flex-1 overflow-y-auto w-full px-4 pt-6 flex flex-col items-center pb-6 scrollbar-hide">
-                  {receiptImages.length > 1 && (
-                    <div className="flex gap-2 mb-4 w-[300px] overflow-x-auto scrollbar-hide pb-2 shrink-0">
-                      {receiptImages.map((url: string, idx: number) => (
-                        <button key={idx} onClick={() => setReceiptImageIndex(idx)} className={`w-12 h-12 shrink-0 rounded-lg border-2 overflow-hidden ${idx === receiptImageIndex ? 'border-orange-500 shadow-md' : 'border-transparent opacity-50'} cursor-pointer`}>
-                          <img src={url} crossOrigin="anonymous" className="w-full h-full object-cover" />
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  <div ref={receiptRef} className="bg-white w-[300px] p-6 shadow-2xl relative overflow-hidden shrink-0 border border-stone-100" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
-                    <div className="absolute top-0 left-0 right-0 h-2 bg-transparent" style={{ backgroundImage: "linear-gradient(-45deg, transparent 4px, white 4px), linear-gradient(45deg, transparent 4px, white 4px)", backgroundSize: "8px 8px" }} />
-                    <div className="border-b-2 border-dashed border-stone-300 pb-4 mb-4 text-center mt-2">
-                      <h2 className="text-2xl font-black text-stone-800 tracking-tighter uppercase">TODAY FOOD</h2>
-                      <p className="text-[10px] text-stone-500 mt-1">맛있는 기억을 기록하다</p>
-                    </div>
-                    {receiptImages[receiptImageIndex] && (
-                      <div className="mb-4 rounded-xl border border-stone-200 p-1 bg-stone-50"><img src={receiptImages[receiptImageIndex]} crossOrigin="anonymous" className="w-full h-40 object-cover rounded-lg" /></div>
-                    )}
-                    <div className="space-y-2 mb-4">
-                      <div className="flex justify-between items-end border-b border-stone-100 pb-1"><span className="text-[11px] text-stone-400 font-bold">STORE</span><span className="text-lg font-black text-stone-800 truncate pl-4">{shareReview.storeName}</span></div>
-                      <div className="flex justify-between items-end border-b border-stone-100 pb-1"><span className="text-[11px] text-stone-400 font-bold">MENU</span><span className="text-sm font-bold text-stone-600 truncate pl-4">{shareReview.menu}</span></div>
-                      <div className="flex justify-between items-end pb-1"><span className="text-[11px] text-stone-400 font-bold">RATING</span><span className="text-sm font-bold text-amber-500">{"★".repeat(shareReview.rating)}{"☆".repeat(5 - shareReview.rating)}</span></div>
-                    </div>
-                    <div className="border-t-2 border-dashed border-stone-300 pt-4 mb-2"><p className="text-sm font-medium text-stone-700 italic text-center break-keep bg-stone-50 p-3 rounded-xl">"{shareReview.comment}"</p></div>
-                    <div className="flex flex-col items-center justify-center mt-6 mb-2">
-                      <div className="p-1.5 bg-white border border-stone-200 rounded-xl shadow-sm mb-2">
-                        <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`${window.location.origin}/?uid=${shareReview.userId || user?.uid}&rid=${shareReview.id}`)}`} crossOrigin="anonymous" className="w-16 h-16 opacity-90" />
-                      </div>
-                      <p className="text-[10px] text-stone-500 font-bold tracking-widest">SCAN TO SAVE</p>
-                    </div>
-                    <div className="absolute bottom-0 left-0 right-0 h-2 bg-transparent rotate-180" style={{ backgroundImage: "linear-gradient(-45deg, transparent 4px, white 4px), linear-gradient(45deg, transparent 4px, white 4px)", backgroundSize: "8px 8px" }} />
+      {/* 영수증 모달 및 공유 (z-250) */}
+      {shareReview && (() => {
+        const receiptImages = (shareReview.isMerged ? shareReview.mergedImages : shareReview.imageUrls) || [];
+        const receiptMenu = shareReview.isMerged ? shareReview.mergedMenu : shareReview.menu;
+
+        return (
+          <div className="fixed inset-0 z-[250] flex items-center justify-center p-0 sm:p-6" onClick={() => setShareReview(null)}>
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <div className="relative z-10 flex flex-col w-full h-full sm:h-auto sm:max-h-[90vh] max-w-md bg-[#FFFDF6] sm:rounded-[2rem] sm:border border-stone-200 shadow-2xl overflow-hidden animate-in zoom-in-95 sm:slide-in-from-bottom-0 slide-in-from-bottom-full duration-300" onClick={(e) => e.stopPropagation()}>
+              <div className="flex justify-between items-center w-full p-5 shrink-0 bg-white border-b border-orange-50">
+                <h3 className="text-lg font-bold text-stone-800 flex items-center gap-2"><Share2 size={18} className="text-orange-500" /> 맛집 영수증</h3>
+                <button onClick={() => setShareReview(null)} className="p-1.5 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 transition-colors cursor-pointer"><X size={18} /></button>
+              </div>
+              <div className="flex-1 overflow-y-auto w-full px-4 pt-6 flex flex-col items-center pb-6 scrollbar-hide">
+                {receiptImages.length > 1 && (
+                  <div className="flex gap-2 mb-4 w-[300px] overflow-x-auto scrollbar-hide pb-2 shrink-0">
+                    {receiptImages.map((url: string, idx: number) => (
+                      <button key={idx} onClick={() => setReceiptImageIndex(idx)} className={`w-12 h-12 shrink-0 rounded-lg border-2 overflow-hidden ${idx === receiptImageIndex ? 'border-orange-500 shadow-md' : 'border-transparent opacity-50'} cursor-pointer`}>
+                        <img src={url} crossOrigin="anonymous" className="w-full h-full object-cover" />
+                      </button>
+                    ))}
                   </div>
+                )}
+                <div ref={receiptRef} className="bg-white w-[300px] p-6 shadow-2xl relative overflow-hidden shrink-0 border border-stone-100" style={{ fontFamily: "'Noto Sans KR', sans-serif" }}>
+                  <div className="absolute top-0 left-0 right-0 h-2 bg-transparent" style={{ backgroundImage: "linear-gradient(-45deg, transparent 4px, white 4px), linear-gradient(45deg, transparent 4px, white 4px)", backgroundSize: "8px 8px" }} />
+                  <div className="border-b-2 border-dashed border-stone-300 pb-4 mb-4 text-center mt-2">
+                    <h2 className="text-2xl font-black text-stone-800 tracking-tighter uppercase">TODAY FOOD</h2>
+                    <p className="text-[10px] text-stone-500 mt-1">맛있는 기억을 기록하다</p>
+                  </div>
+                  {receiptImages[receiptImageIndex] && (
+                    <div className="mb-4 rounded-xl border border-stone-200 p-1 bg-stone-50"><img src={receiptImages[receiptImageIndex]} crossOrigin="anonymous" className="w-full h-40 object-cover rounded-lg" /></div>
+                  )}
+                  <div className="space-y-2 mb-4">
+                    <div className="flex justify-between items-end border-b border-stone-100 pb-1"><span className="text-[11px] text-stone-400 font-bold">STORE</span><span className="text-lg font-black text-stone-800 truncate pl-4">{shareReview.storeName}</span></div>
+                    <div className="flex justify-between items-end border-b border-stone-100 pb-1"><span className="text-[11px] text-stone-400 font-bold">MENU</span><span className="text-sm font-bold text-stone-600 truncate pl-4">{receiptMenu}</span></div>
+                    <div className="flex justify-between items-end pb-1"><span className="text-[11px] text-stone-400 font-bold">RATING</span><span className="text-sm font-bold text-amber-500">{"★".repeat(shareReview.rating)}{"☆".repeat(5 - shareReview.rating)}</span></div>
+                  </div>
+                  <div className="border-t-2 border-dashed border-stone-300 pt-4 mb-2"><p className="text-sm font-medium text-stone-700 italic text-center break-keep bg-stone-50 p-3 rounded-xl">"{shareReview.comment}"</p></div>
+                  <div className="flex flex-col items-center justify-center mt-6 mb-2">
+                    <div className="p-1.5 bg-white border border-stone-200 rounded-xl shadow-sm mb-2">
+                      <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`${window.location.origin}/?uid=${shareReview.userId || user?.uid}&rid=${shareReview.id}`)}`} crossOrigin="anonymous" className="w-16 h-16 opacity-90" />
+                    </div>
+                    <p className="text-[10px] text-stone-500 font-bold tracking-widest">SCAN TO SAVE</p>
+                  </div>
+                  <div className="absolute bottom-0 left-0 right-0 h-2 bg-transparent rotate-180" style={{ backgroundImage: "linear-gradient(-45deg, transparent 4px, white 4px), linear-gradient(45deg, transparent 4px, white 4px)", backgroundSize: "8px 8px" }} />
                 </div>
+              </div>
 
-                <div className="shrink-0 w-full p-4 bg-white border-t border-stone-100 pb-8 sm:pb-5">
-                  <div className="flex flex-col gap-2 w-full max-w-[300px] mx-auto">
-                    <button onClick={handleKakaoShare} className="w-full bg-[#FEE500] hover:bg-[#FDD800] text-stone-900 font-black py-3.5 rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer"><MessageCircle size={18} className="fill-stone-900" /> 카카오톡으로 공유하기</button>
+              <div className="shrink-0 w-full p-4 bg-white border-t border-stone-100 pb-8 sm:pb-5">
+                <div className="flex flex-col gap-2 w-full max-w-[300px] mx-auto">
+                  <button onClick={handleKakaoShare} className="w-full bg-[#FEE500] hover:bg-[#FDD800] text-stone-900 font-black py-3.5 rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer"><MessageCircle size={18} className="fill-stone-900" /> 카카오톡으로 공유하기</button>
 
-                    <div className="mt-2 pt-3 border-t border-stone-100">
-                      <p className="text-[11px] text-stone-500 font-bold mb-2 text-center flex items-center justify-center gap-1"><MapPin size={12} /> 이 맛집의 위치와 후기가 궁금하다면?</p>
-                      <a href={`https://map.kakao.com/link/search/${encodeURIComponent(shareReview.storeName)}`} target="_blank" rel="noopener noreferrer" className="w-full bg-stone-800 hover:bg-black text-white font-black py-3.5 rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer transition-colors text-sm">
-                        카카오맵에서 맛집 보기
-                      </a>
-                    </div>
+                  <div className="mt-2 pt-3 border-t border-stone-100">
+                    <p className="text-[11px] text-stone-500 font-bold mb-2 text-center flex items-center justify-center gap-1"><MapPin size={12} /> 이 맛집의 위치와 후기가 궁금하다면?</p>
+                    <a href={`https://map.kakao.com/link/search/${encodeURIComponent(shareReview.storeName)}`} target="_blank" rel="noopener noreferrer" className="w-full bg-stone-800 hover:bg-black text-white font-black py-3.5 rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer transition-colors text-sm">
+                      카카오맵에서 맛집 보기
+                    </a>
+                  </div>
 
-                    <div className="flex gap-2 mt-1">
-                      <button onClick={handleDownloadReceipt} disabled={isGeneratingImage} className="flex-1 bg-stone-50 text-stone-800 text-sm font-bold py-3.5 rounded-xl shadow-sm border border-stone-200 flex items-center justify-center gap-2 cursor-pointer">{isGeneratingImage ? <Loader2 size={16} className="animate-spin text-orange-500" /> : <Download size={16} className="text-orange-500" />} 이미지 저장</button>
-                      <button onClick={handleCopyLink} className="flex-1 bg-stone-50 text-stone-800 text-sm font-bold py-3.5 rounded-xl shadow-sm border border-stone-200 flex items-center justify-center gap-2 cursor-pointer"><Copy size={16} className="text-blue-500" /> 링크 복사</button>
-                    </div>
+                  <div className="flex gap-2 mt-1">
+                    <button onClick={handleDownloadReceipt} disabled={isGeneratingImage} className="flex-1 bg-stone-50 text-stone-800 text-sm font-bold py-3.5 rounded-xl shadow-sm border border-stone-200 flex items-center justify-center gap-2 cursor-pointer">{isGeneratingImage ? <Loader2 size={16} className="animate-spin text-orange-500" /> : <Download size={16} className="text-orange-500" />} 이미지 저장</button>
+                    <button onClick={handleCopyLink} className="flex-1 bg-stone-50 text-stone-800 text-sm font-bold py-3.5 rounded-xl shadow-sm border border-stone-200 flex items-center justify-center gap-2 cursor-pointer"><Copy size={16} className="text-blue-500" /> 링크 복사</button>
                   </div>
                 </div>
               </div>
-            );
-          })()}
-        </div>
-      )}
+            </div>
+          </div>
+        );
+      })()}
 
       {isScrapModalOpen && (
         <div className="fixed inset-0 z-[250] flex items-end sm:items-center justify-center" onClick={() => setIsScrapModalOpen(false)}>
