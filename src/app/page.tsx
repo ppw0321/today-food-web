@@ -400,7 +400,6 @@ export default function Home() {
   const myName = user ? profileNickname : guestId;
   const isHost = roomData?.hostUid === myId;
 
-  // 🌟 (개선 5) 투표 대기방에서 나갈 때 참가자 명단에서 완전히 삭제 및 setup 상태 폭파 예외 처리
   const handleCloseTinder = async () => {
     if (tinderState === 'setup') {
       closeTinderFlow();
@@ -431,8 +430,15 @@ export default function Home() {
   // -------------------------------------------------------------
   // Effects
   // -------------------------------------------------------------
+
   useEffect(() => {
     if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const kmapParam = params.get("kmap");
+      if (kmapParam) {
+        window.location.href = `https://map.kakao.com/link/search/${encodeURIComponent(kmapParam)}`;
+        return;
+      }
       const userAgent = navigator.userAgent.toLowerCase();
       if (userAgent.includes("kakaotalk")) {
         setIsKakaoBrowser(true);
@@ -485,7 +491,11 @@ export default function Home() {
     const ridParam = params.get("rid");
 
     if (roomParam) {
-      joinRoom(roomParam);
+      if (tinderRoomId !== roomParam) {
+        setRoomData(null);
+        setHasVoted(false);
+        joinRoom(roomParam);
+      }
     } else if (uidParam && ridParam) {
       const fetchSharedReview = async () => {
         try {
@@ -500,7 +510,7 @@ export default function Home() {
       };
       fetchSharedReview();
     }
-  }, [authLoading, myName]);
+  }, [authLoading, myName, tinderRoomId]);
 
   useEffect(() => {
     const checkAndImport = async () => {
@@ -537,7 +547,6 @@ export default function Home() {
     checkAndImport();
   }, [user, authLoading, pendingImportTrigger, knownCategories]);
 
-  // 🌟 (버그 수정 1) 방 입장 시 0.8초간 닉네임 로딩을 기다리고 모든 유령 ID를 강제 삭제합니다!
   const joinRoom = async (roomId: string) => {
     try {
       const roomRef = doc(db, "rooms", roomId);
@@ -564,7 +573,7 @@ export default function Home() {
         const myVotes = rData.votes?.[myId];
         setHasVoted(!!myVotes);
       } else {
-        alert("존재하지 않거나 삭제된 투표방입니다.");
+        alert("투표방이 이미 종료되었거나 유효하지 않은 링크입니다.");
         closeTinderFlow();
       }
     } catch (e) { console.error(e); }
@@ -735,8 +744,7 @@ export default function Home() {
       places.forEach((p: any) => {
         const matched = reviews.find((r: Review) => {
           if (r.placeId && p.id && r.placeId === p.id) return true;
-          if (!r.placeId && r.storeName && normalize(r.storeName).includes(normalize(p.place_name))) return true;
-          return false;
+          return normalize(r.storeName).includes(normalize(p.place_name)) || normalize(p.place_name).includes(normalize(r.storeName));
         });
 
         if (matched) {
@@ -873,10 +881,9 @@ export default function Home() {
     });
   };
 
-  // 🌟 (개선 4, 6) 외부 장소 카카오맵 검색 링크 치환 및 자동 방폭파 취소
   const handleFinalResultKakaoShare = async (place: any, isSavedPlace: boolean) => {
     executeKakaoShare(async (kakao) => {
-      const linkUrl = isSavedPlace ? `${window.location.origin}/?uid=${place.userId || user?.uid}&rid=${place.id}` : `https://map.kakao.com/link/search/${encodeURIComponent(place.place_name)}`;
+      const linkUrl = isSavedPlace ? `${window.location.origin}/?uid=${place.userId || user?.uid}&rid=${place.id}` : `${window.location.origin}/?kmap=${encodeURIComponent(place.place_name)}`;
       const storeName = isSavedPlace ? place.storeName : place.place_name;
 
       kakao.Share.sendDefault({
@@ -887,7 +894,7 @@ export default function Home() {
           imageUrl: isSavedPlace && place.imageUrls?.[0] ? place.imageUrls[0] : 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1',
           link: { mobileWebUrl: linkUrl, webUrl: linkUrl }
         },
-        buttons: [{ title: isSavedPlace ? '영수증 확인하기' : '카카오맵에서 맛집 보기', link: { mobileWebUrl: linkUrl, webUrl: linkUrl } }],
+        buttons: [{ title: '맛집 정보 보기', link: { mobileWebUrl: linkUrl, webUrl: linkUrl } }],
       });
     });
   };
@@ -917,7 +924,7 @@ export default function Home() {
       kakao.Share.sendDefault({
         objectType: 'feed',
         content: { title: `🍽️ [오늘 뭐 먹지?] ${shareReview.storeName}`, description: `⭐ 별점: ${shareReview.rating}.0\n💬 "${shareReview.comment}"`, imageUrl: shareReview.imageUrls?.[receiptImageIndex] || 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1', link: { mobileWebUrl: url, webUrl: url } },
-        buttons: [{ title: '맛집 저장하기', link: { mobileWebUrl: url, webUrl: url } }],
+        buttons: [{ title: '맛집 정보 보기', link: { mobileWebUrl: url, webUrl: url } }],
       });
     });
   };
@@ -1045,8 +1052,7 @@ export default function Home() {
       places.forEach((p: any) => {
         const matched = reviews.find((r: Review) => {
           if (r.placeId && p.id && r.placeId === p.id) return true;
-          if (!r.placeId && r.storeName && normalize(r.storeName).includes(normalize(p.place_name))) return true;
-          return false;
+          return normalize(r.storeName).includes(normalize(p.place_name)) || normalize(p.place_name).includes(normalize(r.storeName));
         });
         if (matched) { if (!saved.some((s: Review) => s.id === matched.id)) saved.push(matched); }
         else { if (external.length < 5) external.push(p); }
@@ -1082,7 +1088,6 @@ export default function Home() {
     );
   }
 
-  // 🌟 (버그 수정 7) 가게명이 너무 길어도 UI가 깨지지 않고 말줄임표 처리되도록 Flexbox 구조 완벽 수정
   const renderReviewList = () => {
     if (filteredReviews.length === 0) {
       return <div className="py-12 text-center bg-white rounded-3xl border border-stone-100"><p className="text-stone-500 font-bold mb-1">저장된 맛집이 없어요 🥲</p></div>;
@@ -1090,7 +1095,7 @@ export default function Home() {
     return (
       <div className="grid gap-6">
         {filteredReviews.map((review: Review) => (
-          <div key={review.id} className="bg-white rounded-3xl overflow-hidden border border-stone-100 shadow-sm hover:shadow-md transition-shadow relative">
+          <div key={review.id} className="bg-white rounded-3xl overflow-hidden border border-stone-100 shadow-sm hover:shadow-md transition-shadow relative flex flex-col">
             {showGroupRecords && (
               <div className="absolute top-3 left-3 z-10 bg-white/90 backdrop-blur-sm p-1.5 rounded-full shadow-md border border-white/50 flex items-center gap-2 pr-3">
                 {review.userPhoto ? <img src={review.userPhoto} className="w-5 h-5 rounded-full object-cover" /> : <div className="w-5 h-5 rounded-full bg-stone-200 flex items-center justify-center text-[10px]"><User size={10} /></div>}
@@ -1098,13 +1103,13 @@ export default function Home() {
               </div>
             )}
             {review.imageUrls && review.imageUrls.length > 0 && (
-              <div className="flex overflow-x-auto scrollbar-hide snap-x bg-stone-100 h-48">
+              <div className="flex overflow-x-auto scrollbar-hide snap-x bg-stone-100 h-48 shrink-0">
                 {review.imageUrls.map((url: string, idx: number) => <img key={idx} src={url} onClick={() => setFullScreenData({ urls: review.imageUrls!, currentIndex: idx })} className="h-full w-full object-cover snap-center min-w-full cursor-zoom-in" />)}
               </div>
             )}
-            <div className="p-5 space-y-4">
-              <div className="flex justify-between items-start gap-2">
-                <div className="min-w-0 flex-1">
+            <div className="p-5 flex-1 flex flex-col">
+              <div className="flex justify-between items-start gap-3 mb-4">
+                <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 mb-1">
                     <h3 className="font-bold text-lg text-stone-800 truncate leading-tight">{review.storeName}</h3>
                     {review.placeUrl && <a href={review.placeUrl} target="_blank" className="text-blue-500 hover:text-blue-600 shrink-0"><LinkIcon size={14} /></a>}
@@ -1119,10 +1124,10 @@ export default function Home() {
                       <button onClick={() => handleDeleteReview(review.id)} className="p-2 bg-stone-50 rounded-lg text-stone-400 hover:text-red-500 cursor-pointer"><Trash2 size={14} /></button>
                     </>
                   )}
-                  <div className="flex items-center bg-amber-50 px-2 rounded-lg gap-1"><Star size={12} className="text-amber-500 fill-amber-500" /><span className="text-xs font-bold">{review.rating}.0</span></div>
+                  <div className="flex items-center bg-amber-50 px-2 rounded-lg gap-1 shrink-0"><Star size={12} className="text-amber-500 fill-amber-500" /><span className="text-xs font-bold">{review.rating}.0</span></div>
                 </div>
               </div>
-              <div className="bg-[#FFFDF6] p-4 rounded-2xl italic text-stone-600 text-sm border border-orange-50/50">"{review.comment}"</div>
+              <div className="bg-[#FFFDF6] p-4 rounded-2xl italic text-stone-600 text-sm border border-orange-50/50 mt-auto">"{review.comment}"</div>
             </div>
           </div>
         ))}
@@ -1514,7 +1519,6 @@ export default function Home() {
 
               {(() => {
                 const maxVotes = roomLeaderboard.length > 0 ? Math.max(...roomLeaderboard.map(r => r.count)) : 0;
-                // 🌟 (버그 수정 3) 0표일 때만 실패 창이 뜨도록 수정
                 const isFailed = maxVotes === 0;
                 const isTie = maxVotes > 0 && roomLeaderboard.filter(r => r.count === maxVotes).length > 1;
 
@@ -1714,20 +1718,32 @@ export default function Home() {
                   <>
                     {(roomData?.nearbySaved || []).map((r: Review) => {
                       const isHostFav = r.userId === roomData?.hostUid;
-                      // 🌟 (버그 수정 2) 게스트 화면에서도 '내 리뷰'에 있어야만 단골 맛집이라고 띄워줌
-                      const isMyFav = reviews.some((myR) => (myR.placeId && r.placeId && myR.placeId === r.placeId) || (!myR.placeId && myR.storeName && normalize(myR.storeName).includes(normalize(r.storeName))));
+                      // 🌟 (버그 수정 2, 5) 아이디가 없어도 이름 교차 검증으로 무조건 단골 맛집을 완벽하게 찾아냄
+                      const myFavReview = reviews.find((myR) =>
+                        (myR.placeId && r.placeId && myR.placeId === r.placeId) ||
+                        (myR.storeName && r.storeName && (normalize(myR.storeName).includes(normalize(r.storeName)) || normalize(r.storeName).includes(normalize(myR.storeName))))
+                      );
+                      const isMyFav = !!myFavReview;
 
                       return (
                         <div key={r.id} className="flex items-center justify-between bg-orange-50 border border-orange-100 p-3 rounded-xl">
-                          <div className="flex items-center gap-3 min-w-0">
-                            {r.imageUrls?.[0] && <img src={r.imageUrls[0]} className="w-10 h-10 rounded-lg object-cover" />}
-                            <div className="min-w-0">
-                              {isHostFav && <span className="bg-orange-100 text-orange-600 text-[9px] font-black px-1.5 py-0.5 rounded-sm inline-block mb-1">👑 방장 단골 맛집</span>}
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            {r.imageUrls?.[0] && <img src={r.imageUrls[0]} className="w-10 h-10 rounded-lg object-cover shrink-0" />}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap gap-1 mb-1">
+                                {isHost ? (
+                                  <span className="bg-orange-100 text-orange-600 text-[9px] font-black px-1.5 py-0.5 rounded-sm shrink-0">👑 내 단골 맛집</span>
+                                ) : (
+                                  <>
+                                    {isHostFav && <span className="bg-orange-100 text-orange-600 text-[9px] font-black px-1.5 py-0.5 rounded-sm shrink-0">👑 방장 단골 맛집</span>}
+                                    {isMyFav && <span className="bg-amber-100 text-amber-600 text-[9px] font-black px-1.5 py-0.5 rounded-sm shrink-0">🧡 내 단골 맛집</span>}
+                                  </>
+                                )}
+                              </div>
                               <p className="text-sm font-bold truncate text-orange-900">{r.storeName}</p>
-                              {isMyFav && <p className="text-[10px] text-orange-600">내 단골 맛집</p>}
                             </div>
                           </div>
-                          <div className="flex items-center gap-1 shrink-0 flex-col items-end">
+                          <div className="flex items-center gap-1 shrink-0 flex-col items-end ml-2">
                             <div className="flex items-center"><Star size={11} className="text-amber-500 fill-amber-500 mr-1" /><span className="text-xs font-bold text-amber-600">{r.rating}.0</span></div>
                             {isHost ? (
                               <button onClick={() => handleFinalResultKakaoShare(r, true)} className="mt-1 text-[10px] font-bold bg-stone-800 text-white px-2 py-1 rounded cursor-pointer">이 맛집으로 결정</button>
@@ -1739,10 +1755,21 @@ export default function Home() {
                       )
                     })}
                     {(roomData?.nearbyExternal || []).map((p: any, i: number) => {
-                      const isAlreadySaved = reviews.some(r => (r.placeId && p.id && r.placeId === p.id) || (!r.placeId && r.storeName && normalize(r.storeName).includes(normalize(p.place_name))));
+                      // 🌟 (버그 수정 5) 외부 맛집 리스트도 내 저장 리스트와 교차 검증
+                      const myFavReview = reviews.find(r =>
+                        (r.placeId && p.id && r.placeId === p.id) ||
+                        (r.storeName && p.place_name && (normalize(r.storeName).includes(normalize(p.place_name)) || normalize(p.place_name).includes(normalize(r.storeName))))
+                      );
+                      const isMyFav = !!myFavReview;
+
                       return (
                         <div key={i} className="flex items-center justify-between bg-white border border-stone-200 rounded-xl px-3 py-3 shadow-sm group">
                           <a href={p.place_url} target="_blank" className="flex flex-col min-w-0 flex-1 cursor-pointer pr-2">
+                            {isMyFav && (
+                              <div className="flex flex-wrap gap-1 mb-1">
+                                <span className="bg-amber-100 text-amber-600 text-[9px] font-black px-1.5 py-0.5 rounded-sm shrink-0">🧡 내 단골 맛집</span>
+                              </div>
+                            )}
                             <span className="font-bold text-stone-800 text-sm truncate group-hover:text-stone-900 transition-colors">{p.place_name}</span>
                             <span className="text-[10px] text-stone-400 truncate mt-0.5">{p.address_name}</span>
                           </a>
@@ -1751,7 +1778,11 @@ export default function Home() {
                             {isHost ? (
                               <button onClick={() => handleFinalResultKakaoShare(p, false)} className="text-[10px] font-bold bg-stone-800 text-white px-2 py-1 rounded hover:bg-black transition-colors cursor-pointer">이 맛집으로 결정</button>
                             ) : (
-                              <a href={p.place_url} target="_blank" className="text-[10px] font-bold bg-stone-100 text-stone-500 px-2 py-1 rounded hover:bg-stone-200 transition-colors cursor-pointer">카카오맵 보기</a>
+                              isMyFav ? (
+                                <button onClick={(e) => { e.preventDefault(); setShareReview(myFavReview); }} className="text-[10px] font-bold bg-white border border-stone-200 text-stone-500 px-2 py-1 rounded hover:bg-stone-50 transition-colors cursor-pointer">영수증 보기</button>
+                              ) : (
+                                <button onClick={(e) => { e.preventDefault(); handleScrapPlace(p); }} className="text-[10px] font-bold bg-orange-500 text-white px-2 py-1 rounded hover:bg-orange-600 transition-colors cursor-pointer">+ 저장</button>
+                              )
                             )}
                           </div>
                         </div>
@@ -1983,7 +2014,7 @@ export default function Home() {
                 <div className="mt-2 pt-3 border-t border-stone-100">
                   <p className="text-[11px] text-stone-500 font-bold mb-2 text-center flex items-center justify-center gap-1"><MapPin size={12} /> 이 맛집의 위치와 후기가 궁금하다면?</p>
                   <a href={`https://map.kakao.com/link/search/${encodeURIComponent(shareReview.storeName)}`} target="_blank" rel="noopener noreferrer" className="w-full bg-stone-800 hover:bg-black text-white font-black py-3.5 rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer transition-colors text-sm">
-                    카카오맵에서 식당 보기
+                    카카오맵에서 맛집 보기
                   </a>
                 </div>
 
