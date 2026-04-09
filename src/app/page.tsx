@@ -137,13 +137,11 @@ const PlaceSearchModal = ({ onClose, onSelectTarget, initialQuery = "" }: { onCl
   const [isLoading, setIsLoading] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<any>(null);
 
-  // 0.5초 디바운스 적용
   useEffect(() => {
     const handler = setTimeout(() => { setDebouncedQuery(query); }, 500);
     return () => clearTimeout(handler);
   }, [query]);
 
-  // 키워드로 카카오 API 검색 (음식점, 카페만 필터링)
   useEffect(() => {
     if (debouncedQuery.trim()) {
       const fetchPlaces = async () => {
@@ -153,7 +151,6 @@ const PlaceSearchModal = ({ onClose, onSelectTarget, initialQuery = "" }: { onCl
             headers: { Authorization: `KakaoAK ${KAKAO_REST_KEY}` }
           });
           const data = await res.json();
-          // FD6(음식점), CE7(카페) 만 추출
           setResults((data.documents || []).filter((p: any) => ['FD6', 'CE7'].includes(p.category_group_code)));
         } catch (e) { }
         setIsLoading(false);
@@ -232,6 +229,9 @@ const MultiImagePicker = ({ existingUrls = [], newPreviews = [], onSelect, onRem
     </div>
   );
 };
+// =========================================================================
+// 🌟 메인 앱 컴포넌트 시작
+// =========================================================================
 export default function Home() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -353,7 +353,7 @@ export default function Home() {
     if (!roomData || !tinderItems.length) return [];
     const counts: Record<string, number> = {};
 
-    // 🌟 (개선 3) 무조건 0표로 기본 렌더링 세팅!
+    // 무조건 모든 항목에 0표로 기본값 세팅!
     tinderItems.forEach((item: any) => {
       const id = item.type === 'menu' ? item.name : item.data.id;
       counts[id] = 0;
@@ -400,8 +400,12 @@ export default function Home() {
   const myName = user ? profileNickname : guestId;
   const isHost = roomData?.hostUid === myId;
 
-  // 🌟 (개선 4) 대기방에서 나갈 때 참가자 명단에서 완전히 삭제
+  // 🌟 (버그 수정 5, 4) 방장이 대기방에서 나갈 땐 폭파, 게스트는 명단 삭제
   const handleCloseTinder = async () => {
+    if (tinderState === 'setup') {
+      closeTinderFlow();
+      return;
+    }
     if (tinderState === 'share_room' && !isHost) {
       if (window.confirm("투표 대기방에서 나가시겠습니까?")) {
         if (tinderRoomId) await updateDoc(doc(db, "rooms", tinderRoomId), { participants: arrayRemove(myName) });
@@ -424,6 +428,9 @@ export default function Home() {
     window.history.replaceState({}, document.title, window.location.pathname);
   };
 
+  // -------------------------------------------------------------
+  // Effects
+  // -------------------------------------------------------------
   useEffect(() => {
     if (typeof window !== "undefined") {
       const userAgent = navigator.userAgent.toLowerCase();
@@ -495,7 +502,6 @@ export default function Home() {
     }
   }, [authLoading, myName]);
 
-  // 🌟 (개선 5) 이미 저장된 맛집인지 placeId로 확인 후 영수증 띄워줌
   useEffect(() => {
     const checkAndImport = async () => {
       const stored = sessionStorage.getItem('pendingImport');
@@ -531,7 +537,7 @@ export default function Home() {
     checkAndImport();
   }, [user, authLoading, pendingImportTrigger, knownCategories]);
 
-  // 🌟 (버그 수정 1) 로그인 유저 방 입장 시 익명 ID 완벽 클렌징
+  // 🌟 (버그 수정 1) 방 입장 시 0.8초간 닉네임 로딩을 기다리고 모든 유령 ID를 삭제합니다!
   const joinRoom = async (roomId: string) => {
     try {
       const roomRef = doc(db, "rooms", roomId);
@@ -540,9 +546,19 @@ export default function Home() {
         const rData = roomDoc.data();
         if (rData.status !== 'closed' && rData.status !== 'reveal' && rData.status !== 'destroyed') {
           setTimeout(async () => {
-            if (user && guestId) await updateDoc(roomRef, { participants: arrayRemove(guestId) }).catch(e => { });
-            await updateDoc(roomRef, { participants: arrayUnion(myName) }).catch(e => { });
-          }, 500);
+            const freshDoc = await getDoc(roomRef);
+            if (freshDoc.exists()) {
+              let currentParticipants = freshDoc.data().participants || [];
+              if (user) {
+                // 로그인 유저라면 모든 유령(익명_) 데이터 삭제
+                currentParticipants = currentParticipants.filter((p: string) => !p.startsWith("익명_"));
+              }
+              if (!currentParticipants.includes(myName)) {
+                currentParticipants.push(myName);
+              }
+              await updateDoc(roomRef, { participants: currentParticipants }).catch(e => { });
+            }
+          }, 800);
         }
         setTinderRoomId(roomId); setTinderMode(rData.mode); setTinderItems(rData.items || []);
         setCurrentTinderIndex(0); setLikedTinderItems([]); setTinderFinalPick(0);
@@ -857,10 +873,10 @@ export default function Home() {
     });
   };
 
-  // 🌟 (버그 수정 3) 최종 결과 공유 후 방 폭파하지 않고 유지
+  // 🌟 (버그 수정 4, 6) 외부 맛집 다이렉트 맵 링크 변환 및 공유 성공 시 자동 방폭파 취소
   const handleFinalResultKakaoShare = async (place: any, isSavedPlace: boolean) => {
     executeKakaoShare(async (kakao) => {
-      const linkUrl = isSavedPlace ? `${window.location.origin}/?uid=${place.userId || user?.uid}&rid=${place.id}` : place.place_url;
+      const linkUrl = isSavedPlace ? `${window.location.origin}/?uid=${place.userId || user?.uid}&rid=${place.id}` : `https://map.kakao.com/link/search/${encodeURIComponent(place.place_name)}`;
       const storeName = isSavedPlace ? place.storeName : place.place_name;
 
       kakao.Share.sendDefault({
@@ -873,8 +889,6 @@ export default function Home() {
         },
         buttons: [{ title: isSavedPlace ? '영수증 확인하기' : '카카오맵에서 보기', link: { mobileWebUrl: linkUrl, webUrl: linkUrl } }],
       });
-
-      alert("카카오톡으로 공유되었습니다!");
     });
   };
 
@@ -893,8 +907,6 @@ export default function Home() {
         },
         buttons: [{ title: '맛집 정보 보기', link: { mobileWebUrl: url, webUrl: url } }],
       });
-
-      alert("카카오톡으로 공유되었습니다!");
     });
   };
 
@@ -1049,7 +1061,10 @@ export default function Home() {
     setIsLocating(false);
   };
 
-  // 🌟 (개선 4) 카카오톡 튕김 시 안내 UI 복구 (return null 대신 표시)
+  // -------------------------------------------------------------
+  // Render
+  // -------------------------------------------------------------
+
   if (isKakaoBrowser) {
     return (
       <div className="min-h-screen bg-stone-900 flex flex-col items-center justify-center text-white p-6 z-[9999] fixed inset-0">
@@ -1057,8 +1072,8 @@ export default function Home() {
         <p className="font-bold text-xl mb-3">기본 브라우저로 이동 중입니다!</p>
         <div className="bg-stone-800 p-5 rounded-2xl border border-stone-700 text-center">
           <p className="text-sm text-stone-300 break-keep leading-relaxed">
-            로그인 상태 유지를 위해 안전한 브라우저로 이동합니다.<br />
-            자동으로 화면이 넘어가지 않는다면 우측 하단의<br />
+            안전한 환경을 위해 기본 브라우저로 연결합니다.<br />
+            화면이 자동으로 넘어가지 않는다면 우측 하단의<br />
             <span className="text-orange-500 font-bold px-1">⋮ 버튼</span>을 눌러 <span className="text-orange-500 font-bold px-1">'다른 브라우저로 열기'</span>를 선택해주세요.
           </p>
         </div>
@@ -1066,6 +1081,7 @@ export default function Home() {
     );
   }
 
+  // 🌟 (개선 7) 가게명이 너무 길어도 UI가 깨지지 않고 말줄임표 처리되도록 Flexbox 구조 완벽 수정
   const renderReviewList = () => {
     if (filteredReviews.length === 0) {
       return <div className="py-12 text-center bg-white rounded-3xl border border-stone-100"><p className="text-stone-500 font-bold mb-1">저장된 맛집이 없어요 🥲</p></div>;
@@ -1086,15 +1102,15 @@ export default function Home() {
               </div>
             )}
             <div className="p-5 space-y-4">
-              <div className="flex justify-between items-start">
-                <div className="min-w-0 pr-2">
-                  <h3 className="font-bold text-lg text-stone-800 truncate flex items-center gap-1.5">
-                    {review.storeName}
-                    {review.placeUrl && <a href={review.placeUrl} target="_blank" className="text-blue-500 hover:text-blue-600"><LinkIcon size={14} /></a>}
-                  </h3>
+              <div className="flex justify-between items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <h3 className="font-bold text-lg text-stone-800 truncate leading-tight">{review.storeName}</h3>
+                    {review.placeUrl && <a href={review.placeUrl} target="_blank" className="text-blue-500 hover:text-blue-600 shrink-0"><LinkIcon size={14} /></a>}
+                  </div>
                   <p className="text-orange-500 text-sm font-semibold truncate">{review.menu} | {review.category}</p>
                 </div>
-                <div className="flex gap-1 shrink-0">
+                <div className="flex gap-1 shrink-0 items-center">
                   <button onClick={() => { setShareReview(review); setReceiptImageIndex(0); }} className="p-2 bg-stone-50 rounded-lg text-stone-400 hover:text-blue-500 cursor-pointer"><Share2 size={14} /></button>
                   {review.userId === user?.uid && (
                     <>
@@ -1497,7 +1513,7 @@ export default function Home() {
 
               {(() => {
                 const maxVotes = roomLeaderboard.length > 0 ? Math.max(...roomLeaderboard.map(r => r.count)) : 0;
-                // 🌟 (버그 수정 3) 1표 이상이어도 실패 처리되던 문제 해결 -> 오직 아무도 안 눌렀을 때만 실패!
+                // 🌟 (버그 수정 3) 0표일 때만 실패 창이 뜨도록 수정
                 const isFailed = maxVotes === 0;
                 const isTie = maxVotes > 0 && roomLeaderboard.filter(r => r.count === maxVotes).length > 1;
 
@@ -1637,14 +1653,14 @@ export default function Home() {
                   }}
                   className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black py-4 rounded-xl shadow-lg active:scale-95 transition-transform text-sm cursor-pointer mt-4 flex items-center justify-center gap-2"
                 >
-                  {tinderMode === 'menu' ? <><Search size={16} /> 이 메뉴로 주변 맛집 찾기</> : <><MessageCircle size={16} /> 이 식당으로 결정 (카톡 공유)</>}
+                  {tinderMode === 'menu' ? <><Search size={16} /> 이 메뉴로 주변 맛집 찾기</> : <><MessageCircle size={16} /> 이 맛집으로 결정 (카톡 공유)</>}
                 </button>
               ) : (
                 <div className="mt-4 p-4 bg-stone-50 rounded-xl">
                   {tinderMode === 'menu' ? (
                     <p className="text-[11px] font-bold text-stone-500 flex justify-center items-center gap-2 animate-pulse"><Loader2 className="animate-spin" size={14} /> 방장이 주변 맛집을 검색 중입니다...</p>
                   ) : (
-                    <button onClick={() => setShareReview(roomData.finalWinner.data)} className="w-full bg-stone-800 text-white font-bold py-3.5 rounded-xl text-sm cursor-pointer">🧾 1위 식당 영수증 보기</button>
+                    <button onClick={() => setShareReview(roomData.finalWinner.data)} className="w-full bg-stone-800 text-white font-bold py-3.5 rounded-xl text-sm cursor-pointer">🧾 1위 맛집 영수증 보기</button>
                   )}
                 </div>
               )}
@@ -1674,6 +1690,9 @@ export default function Home() {
                   <>
                     {(roomData?.nearbySaved || []).map((r: Review) => {
                       const isHostFav = r.userId === roomData?.hostUid;
+                      // 🌟 (버그 수정 2) 게스트 화면에서도 '내 리뷰'에 있어야만 단골 맛집이라고 띄워줌
+                      const isMyFav = reviews.some((myR) => myR.placeId === r.placeId || (myR.storeName && normalize(myR.storeName).includes(normalize(r.storeName))));
+
                       return (
                         <div key={r.id} className="flex items-center justify-between bg-orange-50 border border-orange-100 p-3 rounded-xl">
                           <div className="flex items-center gap-3 min-w-0">
@@ -1681,13 +1700,13 @@ export default function Home() {
                             <div className="min-w-0">
                               {isHostFav && <span className="bg-orange-100 text-orange-600 text-[9px] font-black px-1.5 py-0.5 rounded-sm inline-block mb-1">👑 방장 단골 맛집</span>}
                               <p className="text-sm font-bold truncate text-orange-900">{r.storeName}</p>
-                              <p className="text-[10px] text-orange-600">단골 맛집</p>
+                              {isMyFav && <p className="text-[10px] text-orange-600">내 단골 맛집</p>}
                             </div>
                           </div>
                           <div className="flex items-center gap-1 shrink-0 flex-col items-end">
                             <div className="flex items-center"><Star size={11} className="text-amber-500 fill-amber-500 mr-1" /><span className="text-xs font-bold text-amber-600">{r.rating}.0</span></div>
                             {isHost ? (
-                              <button onClick={() => handleFinalResultKakaoShare(r, true)} className="mt-1 text-[10px] font-bold bg-stone-800 text-white px-2 py-1 rounded cursor-pointer">이 식당으로 결정</button>
+                              <button onClick={() => handleFinalResultKakaoShare(r, true)} className="mt-1 text-[10px] font-bold bg-stone-800 text-white px-2 py-1 rounded cursor-pointer">이 맛집으로 결정</button>
                             ) : (
                               <button onClick={() => setShareReview(r)} className="mt-1 text-[10px] font-bold bg-white border border-stone-200 text-stone-500 px-2 py-1 rounded cursor-pointer">영수증 보기</button>
                             )}
@@ -1706,7 +1725,7 @@ export default function Home() {
                           <div className="flex flex-col items-end shrink-0 gap-1.5 ml-2">
                             <span className="text-[10px] font-extrabold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">{p.distance}m</span>
                             {isHost ? (
-                              <button onClick={() => handleFinalResultKakaoShare(p, false)} className="text-[10px] font-bold bg-stone-800 text-white px-2 py-1 rounded hover:bg-black transition-colors cursor-pointer">이 식당으로 결정</button>
+                              <button onClick={() => handleFinalResultKakaoShare(p, false)} className="text-[10px] font-bold bg-stone-800 text-white px-2 py-1 rounded hover:bg-black transition-colors cursor-pointer">이 맛집으로 결정</button>
                             ) : (
                               <a href={p.place_url} target="_blank" className="text-[10px] font-bold bg-stone-100 text-stone-500 px-2 py-1 rounded hover:bg-stone-200 transition-colors cursor-pointer">카카오맵 보기</a>
                             )}
