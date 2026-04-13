@@ -129,7 +129,7 @@ const KAKAO_JS_KEY = "6d8e9624fa45bf20fe85ee7dc75aa28d";   // 카톡 공유/초�
 const KAKAO_REST_KEY = "deb0556cf6ab2cc0e38a558fd65ae01b"; // 식당 검색용 (REST API 키)
 
 // =========================================================================
-// 🌟 격리된 순수 컴포넌트들 (타이핑 렉 방지 및 재사용)
+// 🌟 격리된 순수 컴포넌트들
 // =========================================================================
 const PlaceSearchModal = ({ onClose, onSelectTarget, initialQuery = "" }: { onClose: () => void, onSelectTarget: (place: any) => void, initialQuery?: string }) => {
   const [query, setQuery] = useState(initialQuery);
@@ -252,6 +252,8 @@ export default function Home() {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [syncTab, setSyncTab] = useState<'add' | 'list'>('add');
+
   const [partnerCode, setPartnerCode] = useState("");
   const [partnerUids, setPartnerUids] = useState<string[]>([]);
   const [partnersData, setPartnersData] = useState<Record<string, any>>({});
@@ -340,7 +342,6 @@ export default function Home() {
 
   const [isKakaoBrowser, setIsKakaoBrowser] = useState(false);
 
-  // 🌟 (버그 수정 3) 모든 모달이 팝업될 때 백그라운드 스크롤 강제 잠금 적용 (Scroll Chaining 차단)
   const isAnyModalOpen = isAuthModalOpen || isProfileModalOpen || isSyncModalOpen || isBadgeModalOpen || isScrapModalOpen || !!editingReview || !!fullScreenData || !!shareReview || tinderState !== 'idle' || isPlaceSearchModalOpen;
 
   useEffect(() => {
@@ -390,7 +391,6 @@ export default function Home() {
         ...others.flatMap(o => o.imageUrls || [])
       ])).slice(0, 10);
 
-      // 🌟 (버그 수정 2) 영수증 모달에서 탭 전환 시 사진도 각자 데이터로 동기화할 수 있도록 imageUrls 배열 저장
       const mergedComments = [
         { id: base.id, userId: base.userId, userName: base.userName, userPhoto: base.userPhoto, rating: base.rating, comment: base.comment, menu: base.menu, imageUrls: base.imageUrls || [] },
         ...others.map(o => ({ id: o.id, userId: o.userId, userName: o.userName, userPhoto: o.userPhoto, rating: o.rating, comment: o.comment, menu: o.menu, imageUrls: o.imageUrls || [] }))
@@ -989,7 +989,6 @@ export default function Home() {
     });
   };
 
-  // 🌟 (버그 수정) 영수증 공유 시 타입스크립트 에러 방지 방어코드 추가 완료
   const handleKakaoShare = () => {
     if (!shareReview || !user) return;
     executeKakaoShare((kakao) => {
@@ -1018,7 +1017,6 @@ export default function Home() {
     setIsGeneratingImage(false);
   };
 
-  // 🌟 (버그 수정) 링크 복사 시 타입스크립트 에러 방어코드 추가 완료
   const handleCopyLink = async () => {
     if (!user || !shareReview) return;
     const safeMergedComments = shareReview.mergedComments || [];
@@ -1163,7 +1161,6 @@ export default function Home() {
     } catch (e) { alert("검색 동기화 실패"); }
     setIsLocating(false);
   };
-
   // -------------------------------------------------------------
   // Render
   // -------------------------------------------------------------
@@ -1184,6 +1181,7 @@ export default function Home() {
     );
   }
 
+  // 🌟 (버그 수정 4) 사진이 없는 리뷰도 형태가 붕괴되지 않도록 기본 영역 유지 & 아바타 그룹 UI 적용
   const renderReviewList = () => {
     if (mergedReviews.length === 0) {
       return <div className="py-12 text-center bg-white rounded-3xl border border-stone-100"><p className="text-stone-500 font-bold mb-1">저장된 맛집이 없어요 🥲</p></div>;
@@ -1205,19 +1203,21 @@ export default function Home() {
 
               {showGroupRecords && review.isMerged && (
                 <div className="absolute top-3 left-3 z-10 flex -space-x-2">
+                  {/* 🌟 확장성 방어: 최대 3명까지만 프로필 아이콘 노출, 나머지는 숫자 뱃지 */}
                   {displayComments.slice(0, 3).map((mc: any, i: number) => (
-                    <div key={i} className="bg-white/90 backdrop-blur-sm p-0.5 rounded-full shadow-md border border-white/50 flex items-center justify-center">
+                    <div key={i} className="bg-white/90 backdrop-blur-sm p-0.5 rounded-full shadow-md border border-white/50 flex items-center justify-center relative z-10">
                       {mc.userPhoto ? <img src={mc.userPhoto} className="w-6 h-6 rounded-full object-cover" /> : <div className="w-6 h-6 rounded-full bg-stone-200 flex items-center justify-center text-[10px]"><User size={12} /></div>}
                     </div>
                   ))}
                   {displayComments.length > 3 && (
-                    <div className="bg-white/90 backdrop-blur-sm p-0.5 rounded-full shadow-md border border-white/50 flex items-center justify-center w-7 h-7 text-[10px] font-bold text-stone-600">
+                    <div className="bg-white/90 backdrop-blur-sm p-0.5 rounded-full shadow-md border border-white/50 flex items-center justify-center w-7 h-7 text-[10px] font-bold text-stone-600 relative z-0">
                       +{displayComments.length - 3}
                     </div>
                   )}
                 </div>
               )}
 
+              {/* 🌟 수정 포인트: 사진이 없을 때는 찌그러지지 않게 텅 빈 회색 영역과 아이콘 노출 */}
               {displayImages.length > 0 ? (
                 <div className="flex overflow-x-auto scrollbar-hide snap-x bg-stone-100 h-48 shrink-0">
                   {displayImages.map((url: string, idx: number) => (
@@ -1237,10 +1237,12 @@ export default function Home() {
                       <h3 className="font-bold text-lg text-stone-800 truncate leading-tight">{review.storeName}</h3>
                       {review.placeUrl && <a href={review.placeUrl} target="_blank" className="text-blue-500 hover:text-blue-600 shrink-0"><LinkIcon size={14} /></a>}
                     </div>
+                    {/* 🌟 병합된 메뉴명 노출 */}
                     <p className="text-orange-500 text-sm font-semibold truncate">{review.isMerged ? review.mergedMenu : review.menu} | {review.category}</p>
                   </div>
                   <div className="flex gap-1 shrink-0 items-center">
                     <button onClick={() => { setShareReview(review); setReceiptImageIndex(0); setActiveReceiptIndex(0); }} className="p-2 bg-stone-50 rounded-lg text-stone-400 hover:text-blue-500 cursor-pointer"><Share2 size={14} /></button>
+                    {/* 🌟 병합 리스트에서도 내 기록은 수정/삭제 가능하도록 권한 복구 */}
                     {!review.isMerged && review.userId === user?.uid && (
                       <>
                         <button onClick={() => openEditModal(review)} className="p-2 bg-stone-50 rounded-lg text-stone-400 hover:text-orange-500 cursor-pointer"><Pencil size={14} /></button>
@@ -1254,7 +1256,8 @@ export default function Home() {
                 </div>
 
                 {review.isMerged ? (
-                  <div className="flex overflow-x-auto snap-x scrollbar-hide gap-3 mt-auto pb-1 pt-2 w-full relative">
+                  // 🌟 10명이 되어도 세로로 늘어나지 않는 가로 스와이프 스마트 병합 UI (100% 너비 적용)
+                  <div className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide gap-3 mt-auto pb-1 pt-2 w-full relative">
                     {displayComments.map((mc: any, i: number) => (
                       <div key={i} className="snap-center shrink-0 w-full bg-[#FFFDF6] p-4 rounded-2xl border border-orange-50/50 flex flex-col gap-2 relative">
                         <div className="flex items-center justify-between">
@@ -1392,29 +1395,31 @@ export default function Home() {
           )}
         </section>
 
-        {/* 🌟 (수정 1) 맛집 직접 기록 상단으로 원상복구 */}
-        <section className="bg-white rounded-3xl p-6 shadow-sm border border-orange-50 space-y-5 z-20 relative">
-          <div className="flex items-center gap-2 mb-2"><Star className="text-orange-500 fill-orange-500" size={18} /><h2 className="font-bold text-stone-800">맛집 직접 기록</h2></div>
+        {/* 🌟 (수정 1) 맛집 직접 기록 영역 최상단(리스트 위)으로 원상 복구 */}
+        {user && (
+          <section className="bg-white rounded-3xl p-6 shadow-sm border border-orange-50 space-y-5 z-20 relative">
+            <div className="flex items-center gap-2 mb-2"><Star className="text-orange-500 fill-orange-500" size={18} /><h2 className="font-bold text-stone-800">맛집 직접 기록</h2></div>
 
-          <div className="flex gap-2">
-            <input type="text" value={storeName} onChange={(e) => { setStoreName(e.target.value); setPlaceId(""); setPlaceUrl(""); setAddress(""); }} required placeholder="가게 이름" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-orange-500 outline-none" />
-            <button type="button" onClick={() => { setPlaceSearchTarget('add'); setIsPlaceSearchModalOpen(true); }} className="shrink-0 bg-blue-50 text-blue-600 px-4 rounded-xl font-bold text-xs hover:bg-blue-100 transition-colors whitespace-nowrap cursor-pointer">
-              🔍 카카오맵
-            </button>
-          </div>
-          {placeId && <p className="text-[10px] text-blue-500 font-bold ml-1 -mt-3 flex items-center gap-1"><Check size={12} />카카오맵 장소가 연결되었습니다.</p>}
-
-          <div className="grid grid-cols-2 gap-3">
-            <input type="text" value={menu} onChange={(e) => setMenu(e.target.value)} placeholder="메뉴" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 outline-none text-sm focus:ring-2 focus:ring-orange-500" />
-            <div className="flex items-center justify-center bg-stone-50 border border-stone-100 rounded-xl gap-1">
-              {[1, 2, 3, 4, 5].map(s => <Star key={s} size={18} onClick={() => setRating(s)} className={`cursor-pointer ${rating >= s ? 'text-amber-400 fill-amber-400' : 'text-stone-300'}`} />)}
+            <div className="flex gap-2">
+              <input type="text" value={storeName} onChange={(e) => { setStoreName(e.target.value); setPlaceId(""); setPlaceUrl(""); setAddress(""); }} required placeholder="가게 이름" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-orange-500 outline-none" />
+              <button type="button" onClick={() => { setPlaceSearchTarget('add'); setIsPlaceSearchModalOpen(true); }} className="shrink-0 bg-blue-50 text-blue-600 px-4 rounded-xl font-bold text-xs hover:bg-blue-100 transition-colors whitespace-nowrap cursor-pointer">
+                🔍 카카오맵
+              </button>
             </div>
-          </div>
-          <CategorySelector value={category} onChange={setCategory} showCustom={showCustomCategory} onToggleCustom={() => setShowCustomCategory(!showCustomCategory)} customValue={customCategory} onCustomChange={setCustomCategory} availableCats={knownCategories} />
-          <MultiImagePicker existingUrls={[]} newPreviews={imagePreviews} onSelect={(e: any, t: number) => handleImagesSelect(e, t, setImageFiles, setImagePreviews)} onRemoveExisting={() => { }} onRemoveNew={(idx: number) => { setImageFiles(p => p.filter((_, i) => i !== idx)); setImagePreviews(p => p.filter((_, i) => i !== idx)); }} />
-          <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="한줄평" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 h-24 resize-none outline-none text-sm focus:ring-2 focus:ring-orange-500" />
-          <button onClick={handleAddReview} disabled={isSubmitting} className="w-full bg-orange-500 text-white font-bold py-4 rounded-xl shadow-lg cursor-pointer">{isSubmitting ? "저장 중..." : "기록 저장하기"}</button>
-        </section>
+            {placeId && <p className="text-[10px] text-blue-500 font-bold ml-1 -mt-3 flex items-center gap-1"><Check size={12} />카카오맵 장소가 연결되었습니다.</p>}
+
+            <div className="grid grid-cols-2 gap-3">
+              <input type="text" value={menu} onChange={(e) => setMenu(e.target.value)} placeholder="메뉴" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 outline-none text-sm focus:ring-2 focus:ring-orange-500" />
+              <div className="flex items-center justify-center bg-stone-50 border border-stone-100 rounded-xl gap-1">
+                {[1, 2, 3, 4, 5].map(s => <Star key={s} size={18} onClick={() => setRating(s)} className={`cursor-pointer ${rating >= s ? 'text-amber-400 fill-amber-400' : 'text-stone-300'}`} />)}
+              </div>
+            </div>
+            <CategorySelector value={category} onChange={setCategory} showCustom={showCustomCategory} onToggleCustom={() => setShowCustomCategory(!showCustomCategory)} customValue={customCategory} onCustomChange={setCustomCategory} availableCats={knownCategories} />
+            <MultiImagePicker existingUrls={[]} newPreviews={imagePreviews} onSelect={(e: any, t: number) => handleImagesSelect(e, t, setImageFiles, setImagePreviews)} onRemoveExisting={() => { }} onRemoveNew={(idx: number) => { setImageFiles(p => p.filter((_, i) => i !== idx)); setImagePreviews(p => p.filter((_, i) => i !== idx)); }} />
+            <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="한줄평" className="w-full bg-stone-50 border border-stone-100 rounded-xl py-3 px-4 h-24 resize-none outline-none text-sm focus:ring-2 focus:ring-orange-500" />
+            <button onClick={handleAddReview} disabled={isSubmitting} className="w-full bg-orange-500 text-white font-bold py-4 rounded-xl shadow-lg cursor-pointer">{isSubmitting ? "저장 중..." : "기록 저장하기"}</button>
+          </section>
+        )}
 
         {!user && !authLoading && (
           <section className="relative bg-white rounded-3xl border border-stone-100 overflow-hidden shadow-sm mt-12 mb-12 animate-in fade-in-up duration-500 z-20">
@@ -1980,30 +1985,50 @@ export default function Home() {
         </div>
       )}
 
+      {/* 🌟 (수정) 공유 지도 모달 2-Tab 분리 및 이중 스크롤 제거 */}
       {isSyncModalOpen && (
         <div className="fixed inset-0 z-[210] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsSyncModalOpen(false)} />
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => { setIsSyncModalOpen(false); setSyncTab('add'); }} />
           <div className="relative bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 max-h-[90vh] flex flex-col">
-            <div className="flex justify-between items-center mb-4 shrink-0"><h3 className="text-xl font-black flex items-center gap-2"><MapPin className="text-blue-500" fill="#E0F2FE" /> 공유 지도 만들기</h3><button onClick={() => setIsSyncModalOpen(false)} className="p-1.5 rounded-full bg-stone-100 text-stone-500 cursor-pointer"><X size={18} /></button></div>
-            <div className="overflow-y-auto scrollbar-hide space-y-6 pb-2 pr-1 max-h-[400px]">
-              <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 text-center"><p className="text-[13px] font-bold text-blue-800 leading-relaxed">서로의 코드를 입력하면<br />맛집 지도가 하나로 합쳐져요! 🗺️✨</p></div>
-              <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100">
-                <p className="text-[11px] font-bold text-stone-400 mb-2 uppercase tracking-wider">나의 연결 코드</p>
-                <div className="flex items-center justify-between">
-                  <code className="text-sm font-black text-blue-600 tracking-widest bg-white px-2 py-1 rounded shadow-sm border border-stone-100">{user?.uid?.substring(0, 15)}...</code>
-                  <button onClick={() => { navigator.clipboard.writeText(user?.uid || ""); alert("내 코드가 복사되었습니다!"); }} className="p-2 bg-white rounded-lg shadow-sm text-stone-400 hover:text-blue-500 cursor-pointer"><Copy size={16} /></button>
+            <div className="flex justify-between items-center mb-4 shrink-0">
+              <h3 className="text-xl font-black flex items-center gap-2"><MapPin className="text-blue-500" fill="#E0F2FE" /> 공유 지도 만들기</h3>
+              <button onClick={() => { setIsSyncModalOpen(false); setSyncTab('add'); }} className="p-1.5 rounded-full bg-stone-100 text-stone-500 cursor-pointer"><X size={18} /></button>
+            </div>
+
+            <div className="flex bg-stone-100 p-1 rounded-xl mb-4 shrink-0">
+              <button onClick={() => setSyncTab('add')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${syncTab === 'add' ? 'bg-white shadow-sm text-blue-600' : 'text-stone-500 hover:text-stone-600'}`}>🤝 친구 맺기</button>
+              <button onClick={() => setSyncTab('list')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${syncTab === 'list' ? 'bg-white shadow-sm text-blue-600' : 'text-stone-500 hover:text-stone-600'}`}>
+                👥 내 친구 <span className={`${syncTab === 'list' ? 'bg-blue-100' : 'bg-stone-200'} px-1.5 py-0.5 rounded-md text-[9px]`}>{partnerUids.length}</span>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto scrollbar-hide pb-2">
+              {syncTab === 'add' ? (
+                <div className="space-y-6 animate-in fade-in">
+                  <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 text-center"><p className="text-[13px] font-bold text-blue-800 leading-relaxed">서로의 코드를 입력하면<br />맛집 지도가 하나로 합쳐져요! 🗺️✨</p></div>
+                  <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100">
+                    <p className="text-[11px] font-bold text-stone-400 mb-2 uppercase tracking-wider">나의 연결 코드</p>
+                    <div className="flex items-center justify-between">
+                      <code className="text-sm font-black text-blue-600 tracking-widest bg-white px-2 py-1 rounded shadow-sm border border-stone-100">{user?.uid?.substring(0, 15)}...</code>
+                      <button onClick={() => { navigator.clipboard.writeText(user?.uid || ""); alert("내 코드가 복사되었습니다!"); }} className="p-2 bg-white rounded-lg shadow-sm text-stone-400 hover:text-blue-500 cursor-pointer"><Copy size={16} /></button>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">친구 코드 입력</p>
+                    <input type="text" value={partnerCode} onChange={(e) => setPartnerCode(e.target.value)} placeholder="친구의 코드를 붙여넣기 하세요" className="w-full bg-white border border-stone-200 rounded-xl py-4 px-4 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm" />
+                    <button onClick={handleConnectPartner} disabled={isConnecting || !partnerCode} className="w-full bg-blue-500 hover:bg-blue-600 text-white font-black py-3.5 rounded-xl shadow-md active:scale-95 transition-all disabled:opacity-50 cursor-pointer">{isConnecting ? <Loader2 className="animate-spin mx-auto" /> : "연결 신청하기"}</button>
+                  </div>
                 </div>
-              </div>
-              <div className="space-y-3">
-                <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">친구 코드 입력</p>
-                <input type="text" value={partnerCode} onChange={(e) => setPartnerCode(e.target.value)} placeholder="친구의 코드를 붙여넣기 하세요" className="w-full bg-white border border-stone-200 rounded-xl py-4 px-4 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm" />
-                <button onClick={handleConnectPartner} disabled={isConnecting || !partnerCode} className="w-full bg-blue-500 hover:bg-blue-600 text-white font-black py-3.5 rounded-xl shadow-md active:scale-95 transition-all disabled:opacity-50 cursor-pointer">{isConnecting ? <Loader2 className="animate-spin mx-auto" /> : "연결 신청하기"}</button>
-              </div>
-              {partnerUids.length > 0 && (
-                <div className="pt-4 border-t border-stone-100">
-                  <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1 mb-3">현재 연결된 친구들</p>
-                  <div className="space-y-2 max-h-[150px] overflow-y-auto scrollbar-hide pr-1">
-                    {partnerUids.map(uid => {
+              ) : (
+                <div className="space-y-2 animate-in fade-in">
+                  {partnerUids.length === 0 ? (
+                    <div className="py-10 text-center flex flex-col items-center justify-center gap-3">
+                      <span className="text-4xl">🥲</span>
+                      <p className="text-sm font-bold text-stone-500">아직 연결된 친구가 없어요.</p>
+                      <button onClick={() => setSyncTab('add')} className="text-xs font-bold text-blue-500 bg-blue-50 hover:bg-blue-100 transition-colors px-4 py-2 rounded-xl mt-2 cursor-pointer">친구 맺으러 가기</button>
+                    </div>
+                  ) : (
+                    partnerUids.map(uid => {
                       const p = partnersData[uid];
                       return (
                         <div key={uid} className="flex items-center justify-between bg-white border border-stone-100 p-3 rounded-xl shadow-sm">
@@ -2011,8 +2036,8 @@ export default function Home() {
                           <button onClick={() => handleDisconnect(uid, p?.nickname || "친구")} className="text-[10px] font-bold bg-red-50 text-red-500 hover:bg-red-100 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"><UserMinus size={12} /> 연결 끊기</button>
                         </div>
                       )
-                    })}
-                  </div>
+                    })
+                  )}
                 </div>
               )}
             </div>
@@ -2113,7 +2138,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* 🌟 (수정 완료) TS 에러 차단 - 빈 배열(|| []) 기본값 강제 처리 */}
       {shareReview && (() => {
         const safeMergedComments = shareReview.mergedComments || [];
         const isMergedReceipt = shareReview.isMerged && safeMergedComments.length > 0;
